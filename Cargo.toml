@@ -1,0 +1,15 @@
+[package]
+name = "law-and-order"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# most recent version required becaues of pull-request for using spans
+# with byte instead of codepoint indices.
+# https://github.com/zesterer/ariadne/pull/102
+ariadne = { git = "https://github.com/zesterer/ariadne", branch = "main" }
+clap = { version = "4.3.23", features = ["derive"] }
+logos = "0.13.0"
+peg = "0.8.2"
+rand = "0.8.5"
+termion = "2.0.1"

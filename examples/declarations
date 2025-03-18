@@ -1,0 +1,17 @@
+let
+  id : Unit –[ u 0 ]→ Unit
+  id x = x
+in
+
+let
+  const : Unit –[ u 0 ]→ Unit -[ u 0 ]→ Unit
+  const x y = x
+in
+
+let
+  assoc : ((Unit ⊗ Unit) ⊗ Unit) –[ u 0 ]→ (Unit ⊗ (Unit ⊗ Unit))
+  assoc ((x, y), z) = (x, (y, z))
+in
+
+# const unit (id unit)
+assoc ((unit, unit), unit)

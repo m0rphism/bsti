@@ -1,0 +1,3 @@
+let file1, file2 = (new {(r|w)*c}, new {(r|w)*c}) in
+drop (!{c} file2);
+drop (!{c} file1)

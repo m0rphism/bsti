@@ -1,0 +1,6 @@
+let file = new {(r|w)*c} in
+let read_only1 , file2 = split {r*} file in
+let read_only2 = !{r} read_only1 in
+let read_only3 = !{r} read_only2 in
+drop read_only3;
+drop (!{c} file2)
