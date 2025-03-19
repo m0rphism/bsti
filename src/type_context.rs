@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::regex::Regex;
-use crate::syntax::{Id, Mult, SId, SType, Type};
+use crate::syntax::{Id, Mult, SId, SType, Session, SessionO, SessionOp, Type};
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
 use crate::util::pretty::{Pretty, PrettyEnv};
@@ -552,7 +551,9 @@ pub fn gen_ctx(cats: &[usize], vars: &[Id], i: usize) -> Option<Ctx> {
         // return Some(Ctx::Bind(fake_span(vars[0].clone()), fake_span(Type::Unit)));
         return Some(Ctx::Bind(
             fake_span(vars[0].clone()),
-            fake_span(Type::Regex(fake_span(Regex::Char(0)))),
+            fake_span(Type::Chan(fake_span(Session::Owned(fake_span(
+                SessionO::End(SessionOp::Send),
+            ))))),
         ));
     }
     for x in 1..n {

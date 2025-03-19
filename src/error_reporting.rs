@@ -171,62 +171,6 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(e.span, "This expression requires a type annotation")],
                 );
             }
-            TypeError::ClosedUnfinished(e, r) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Type Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression has an unfinished resource type {}",
-                            pretty_def(&r.val),
-                        ),
-                    )],
-                );
-            }
-            TypeError::InvalidWrite(e, r, w) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Type Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression has resource type {}, which does not support writing {}.",
-                            pretty_def(&r.val),
-                            pretty_def(&w.val),
-                        )
-                    )],
-                );
-            }
-            TypeError::InvalidSplitArg(r1) => {
-                report(
-                    &src,
-                    r1.span.start,
-                    "Type Error",
-                    [label(
-                        r1.span,
-                        "Splitting by an empty prefix is not allowed.",
-                    )],
-                );
-            }
-            TypeError::InvalidSplitRes(e, r, r1, r2) => {
-                report(
-                    &src,
-                    r1.span.start,
-                    "Type Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression tries to split resource {} off from resource {}, which results in an invalid resource {}",
-                            pretty_def(&r1),
-                            pretty_def(&r),
-                            pretty_def(&r2),
-                        )
-                    )],
-                );
-            }
             TypeError::CtxSplitFailed(e, ctx, ctx2) => {
                 report(
                     &src,
@@ -284,17 +228,6 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                             "This unrestricted lambda abstraction tries to capture a non-unrestricted context {}",
                             pretty_def(&ctx.simplify())
                         ),
-                    )],
-                );
-            }
-            TypeError::NewEmpty(r) => {
-                report(
-                    &src,
-                    r.span.start,
-                    "Type Error",
-                    [label(
-                        r.span,
-                        "This resource is unsatisfiable (empty language).",
                     )],
                 );
             }
@@ -394,92 +327,92 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             }
         },
         IErr::Eval(e) => match e {
-            EvalError::ValMismatch(e, v_expected, v_actual) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Evaluation Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression evaluates to {} but should be {}.",
-                            pretty_def(&v_actual),
-                            v_expected,
-                        ),
-                    )],
-                );
-            }
-            EvalError::UndefinedLoc(e, l) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Evaluation Error",
-                    [label(
-                        e.span,
-                        format!("This expression evaluated to the undefined location {}.", l,),
-                    )],
-                );
-            }
-            EvalError::ClosedUnfinished(e, r, w) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Evaluation Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression tries to close a resource of type {} with unfinished or invalid output '{}'.",
-                            pretty_def(&r),
-                            pretty_def(&w),
-                        ),
-                    )],
-                );
-            }
-            EvalError::UndefinedVar(x) => {
-                report(
-                    &src,
-                    x.span.start,
-                    "Evaluation Error",
-                    [label(x.span, format!("This variable is undefined",))],
-                );
-            }
-            EvalError::InvalidWrite(e, r, r1) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Evaluation Error",
-                    [label(
-                        e.span,
-                        format!(
-                            "This expression perform an operation {} which is invalid on a resource of type {}.",
-                            pretty_def(&r1),
-                            pretty_def(&r),
-                        ),
-                    )],
-                );
-            }
-            EvalError::NonEmptyHeap(heap) => {
-                report(
-                    &src,
-                    0,
-                    format!(
-                        "Evaluation Error: Program terminated with non-empty heap:\n{}",
-                        pretty_def(&heap)
-                    ),
-                    [],
-                );
-            }
-            EvalError::AppWithoutAnn(e) => {
-                report(
-                    &src,
-                    e.span.start,
-                    "Evaluation Error",
-                    [label(
-                        e.span,
-                        "This application does not have a multiplicity annotation.",
-                    )],
-                );
-            }
+            //EvalError::ValMismatch(e, v_expected, v_actual) => {
+            //    report(
+            //        &src,
+            //        e.span.start,
+            //        "Evaluation Error",
+            //        [label(
+            //            e.span,
+            //            format!(
+            //                "This expression evaluates to {} but should be {}.",
+            //                pretty_def(&v_actual),
+            //                v_expected,
+            //            ),
+            //        )],
+            //    );
+            //}
+            //EvalError::UndefinedLoc(e, l) => {
+            //    report(
+            //        &src,
+            //        e.span.start,
+            //        "Evaluation Error",
+            //        [label(
+            //            e.span,
+            //            format!("This expression evaluated to the undefined location {}.", l,),
+            //        )],
+            //    );
+            //}
+            //EvalError::ClosedUnfinished(e, r, w) => {
+            //    report(
+            //        &src,
+            //        e.span.start,
+            //        "Evaluation Error",
+            //        [label(
+            //            e.span,
+            //            format!(
+            //                "This expression tries to close a resource of type {} with unfinished or invalid output '{}'.",
+            //                pretty_def(&r),
+            //                pretty_def(&w),
+            //            ),
+            //        )],
+            //    );
+            //}
+            //EvalError::UndefinedVar(x) => {
+            //    report(
+            //        &src,
+            //        x.span.start,
+            //        "Evaluation Error",
+            //        [label(x.span, format!("This variable is undefined",))],
+            //    );
+            //}
+            //EvalError::InvalidWrite(e, r, r1) => {
+            //    report(
+            //        &src,
+            //        e.span.start,
+            //        "Evaluation Error",
+            //        [label(
+            //            e.span,
+            //            format!(
+            //                "This expression perform an operation {} which is invalid on a resource of type {}.",
+            //                pretty_def(&r1),
+            //                pretty_def(&r),
+            //            ),
+            //        )],
+            //    );
+            //}
+            //EvalError::NonEmptyHeap(heap) => {
+            //    report(
+            //        &src,
+            //        0,
+            //        format!(
+            //            "Evaluation Error: Program terminated with non-empty heap:\n{}",
+            //            pretty_def(&heap)
+            //        ),
+            //        [],
+            //    );
+            //}
+            //EvalError::AppWithoutAnn(e) => {
+            //    report(
+            //        &src,
+            //        e.span.start,
+            //        "Evaluation Error",
+            //        [label(
+            //            e.span,
+            //            "This application does not have a multiplicity annotation.",
+            //        )],
+            //    );
+            //}
         },
     }
 }
