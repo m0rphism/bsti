@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    ren::Ren,
+    rep::Rep,
     syntax::{
         Eff, Expr, Id, Mult, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession, SSessionB,
-        SType, Session, SumLabel, Type,
+        SType, Session, SessionB, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxS, JoinOrd},
     util::span::fake_span,
@@ -36,85 +38,6 @@ pub enum TypeError {
     PatternMismatch(SPattern, SType),
     ClauseWithWrongId(SExpr, SId, SId),
     ClauseWithZeroPatterns(SExpr),
-}
-
-#[derive(Debug, Clone)]
-pub struct Rep {
-    pub map: HashMap<Id, Session>,
-}
-
-impl Rep {
-    pub fn empty() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-    pub fn single(id: Id, s: Session) -> Self {
-        Self {
-            map: HashMap::from([(id, s)]),
-        }
-    }
-    pub fn join(&self, u: &Self) -> Self {
-        let mut map = self.map.clone();
-        for (x, s2) in &u.map {
-            if let Some(s1) = map.get_mut(x) {
-                *s1 = s1.join(&s2);
-            } else {
-                map.insert(x.clone(), s2.clone());
-            }
-        }
-        Self { map }
-    }
-    pub fn remove_mut(&mut self, x: &Id) {
-        let _ = self.map.remove(x);
-    }
-    pub fn remove(&self, x: &Id) -> Rep {
-        let mut u = self.clone();
-        u.remove_mut(x);
-        u
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Ren {
-    pub map: HashMap<Id, Id>,
-}
-
-impl Ren {
-    pub fn empty() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-    pub fn single(x: Id, y: Id) -> Self {
-        Self {
-            map: HashMap::from([(x, y)]),
-        }
-    }
-    pub fn join(&self, r: &Self) -> Self {
-        let mut map = HashMap::new();
-        for (x, y) in &self.map {
-            if let Some(z) = r.map.get(y) {
-                map.insert(x.clone(), z.clone());
-            } else {
-                map.insert(x.clone(), y.clone());
-            }
-        }
-        for (x, y) in &r.map {
-            if self.map.get(x).is_none() {
-                map.insert(x.clone(), y.clone());
-            }
-        }
-        Self { map }
-    }
-    pub fn remove_mut(&mut self, x: &Id) {
-        let _ = self.map.remove(x);
-    }
-    pub fn remove(&self, x: &Id) -> Self {
-        let mut r = self.clone();
-        r.remove_mut(x);
-        r
-    }
 }
 
 pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
@@ -258,6 +181,16 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
     }
 }
 
+pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, SessionB> {
+    let mut sis = HashMap::new();
+    for x in fvs {
+        if let Some(Session::Borrowed(s)) = u.map.get(x) {
+            sis.insert(x.clone(), s.val.clone());
+        }
+    }
+    sis
+}
+
 pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
@@ -275,58 +208,64 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         Expr::AppR(spanned, spanned1) => todo!(),
         Expr::Let(spanned, spanned1, spanned2) => todo!(),
         Expr::Pair(e1, e2) => {
-            todo!()
-            //let c1 = ctx.restrict(&e1.free_vars());
-            //let c2 = ctx.restrict(&e2.free_vars());
-            //let (t1, p1) = infer(&c1, e1)?;
-            //let (t2, p2) = infer(&c2, e2)?;
-            //
-            //let m = {
-            //    let c12_lin = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Unordered);
-            //    if ctx.is_subctx_of(&c12_lin) {
-            //        Mult::Lin
-            //    } else {
-            //        let c12_ordl = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered);
-            //        if ctx.is_subctx_of(&c12_ordl) {
-            //            Mult::OrdL
-            //        } else {
-            //            Err(TypeError::CtxSplitFailed(
-            //                e_copy.clone(),
-            //                ctx.clone(),
-            //                c12_ordl.clone(),
-            //            ))?
-            //        }
-            //    }
-            //};
-            //
-            //match m {
-            //    Mult::OrdL if t1.is_ord() && p2 == Eff::Yes => Err(TypeError::MismatchEff(
-            //        *e2.clone(),
-            //        fake_span(Eff::No),
-            //        fake_span(p2),
-            //    ))?,
-            //    Mult::OrdR if t2.is_ord() && p1 == Eff::Yes => Err(TypeError::MismatchEff(
-            //        *e1.clone(),
-            //        fake_span(Eff::No),
-            //        fake_span(p1),
-            //    ))?,
-            //    _ => (),
-            //}
-            //
-            //let t_pair = fake_span(Type::Prod(fake_span(m), Box::new(t1), Box::new(t2)));
-            //
-            //if let Some(m2) = om {
-            //    if m != m2.val {
-            //        Err(TypeError::MismatchMult(
-            //            e_copy,
-            //            t_pair.clone(),
-            //            fake_span(m),
-            //            m2.clone(),
-            //        ))?
-            //    }
-            //}
-            //
-            //Ok((t_pair, Eff::lub(p1, p2)))
+            let fvs1 = e1.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let fvs2 = e2.free_vars();
+            let c2 = ctx.restrict(&fvs2).split_off(&u1);
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            let u = u1.join(&u2);
+
+            let m = {
+                let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
+                let sis = split_infos(&fvs, &u1);
+                let r1 = Ren::fresh_from(sis.keys(), "1");
+                let r2 = Ren::fresh_from(sis.keys(), "2");
+                let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
+                let c12_lin = CtxS::Join(
+                    c1.replace(&u1).rename(&r1),
+                    c2.replace(&u2).rename(&r2),
+                    JoinOrd::Unordered,
+                );
+                if ctx_split.is_subctx_of(&c12_lin) {
+                    Mult::Lin
+                } else {
+                    let c12_ordl = CtxS::Join(
+                        c1.replace(&u1).rename(&r1),
+                        c2.replace(&u2).rename(&r2),
+                        JoinOrd::Ordered,
+                    );
+                    if ctx.is_subctx_of(&c12_ordl) {
+                        Mult::OrdL
+                    } else {
+                        Err(TypeError::CtxSplitFailed(
+                            e.clone(),
+                            ctx.clone(),
+                            c12_ordl.clone(),
+                        ))?
+                    }
+                }
+            };
+
+            match m {
+                Mult::OrdL if t1.is_ord() && p2 == Eff::Yes => Err(TypeError::MismatchEff(
+                    *e2.clone(),
+                    fake_span(Eff::No),
+                    fake_span(p2),
+                ))?,
+                Mult::OrdR if t2.is_ord() && p1 == Eff::Yes => Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(p1),
+                ))?,
+                _ => (),
+            }
+
+            let t_pair = fake_span(Type::Prod(fake_span(m), Box::new(t1), Box::new(t2)));
+
+            Ok((t_pair, u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::LetPair(spanned, spanned1, spanned2, spanned3) => todo!(),
         Expr::CaseSum(spanned, vec) => todo!(),

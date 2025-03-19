@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::syntax::{Id, Mult, SId, SType, Session, SessionO, SessionOp, Type};
+use crate::ren::Ren;
+use crate::rep::Rep;
+use crate::syntax::{Id, Mult, SId, SType, Session, SessionB, SessionO, SessionOp, Type};
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
 use crate::util::pretty::{Pretty, PrettyEnv};
@@ -76,6 +78,31 @@ impl Ctx {
                 c2.map_binds(f);
             }
         }
+    }
+    pub fn map_binds_mut(&mut self, f: &mut impl FnMut(&mut Id, &mut Type)) {
+        match self {
+            Ctx::Empty => (),
+            Ctx::Bind(x, t) => f(x, t),
+            Ctx::Join(c1, c2, _o) => {
+                c1.map_binds_mut(f);
+                c2.map_binds_mut(f);
+            }
+        }
+    }
+    pub fn flatmap_binds_mut(&mut self, f: &mut impl FnMut(Id, Type) -> Ctx) {
+        match self {
+            Ctx::Empty => (),
+            Ctx::Bind(x, t) => *self = f(x.val.clone(), t.val.clone()),
+            Ctx::Join(c1, c2, _o) => {
+                c1.flatmap_binds_mut(f);
+                c2.flatmap_binds_mut(f);
+            }
+        }
+    }
+    pub fn flatmap_binds(&self, f: &mut impl FnMut(Id, Type) -> Ctx) -> Ctx {
+        let mut ctx = self.clone();
+        ctx.flatmap_binds_mut(f);
+        ctx
     }
     pub fn is_unr(&self) -> bool {
         let mut unr = true;
@@ -263,6 +290,70 @@ impl Ctx {
     }
     pub fn is_subctx_of(&self, other: &Self) -> bool {
         self.to_sem().is_subctx_of(&other.to_sem())
+    }
+
+    // ⋯ʳ operator from Agda
+    pub fn replace(&self, u: &Rep) -> Ctx {
+        let mut ctx = self.clone();
+        ctx.map_binds_mut(&mut |x: &mut Id, t: &mut Type| {
+            if let Type::Chan(_) = &t {
+                if let Some(s) = u.map.get(x) {
+                    *t = Type::Chan(fake_span(s.clone()));
+                }
+            }
+        });
+        ctx
+    }
+
+    // %ᶜ operator from Agda
+    pub fn split_off(&self, u: &Rep) -> Ctx {
+        let mut ctx = self.clone();
+        ctx.map_binds_mut(&mut |x: &mut Id, t: &mut Type| {
+            if let Type::Chan(s) = &t {
+                if let Some(Session::Borrowed(s1)) = u.map.get(x) {
+                    if let Some(s2) = s.split(&s1) {
+                        *t = Type::Chan(fake_span(s2.clone()));
+                    }
+                }
+            }
+        });
+        ctx
+    }
+
+    // ⋯ᵘ operator from Agda
+    pub fn rename(&self, r: &Ren) -> Ctx {
+        let mut ctx = self.clone();
+        ctx.map_binds_mut(&mut |x: &mut Id, _: &mut Type| {
+            if let Some(y) = r.map.get(x) {
+                *x = y.clone();
+            }
+        });
+        ctx
+    }
+
+    // split-ctx function from Agda
+    pub fn split_ctx(&self, sis: &HashMap<Id, SessionB>, r1: &Ren, r2: &Ren) -> Ctx {
+        self.flatmap_binds(&mut |x, t| {
+            if let Some(s1) = sis.get(&x) {
+                if let Type::Chan(s) = &t {
+                    if let Some(s2) = s.split(s1) {
+                        let s1 = Session::Borrowed(fake_span(s1.clone()));
+                        return Ctx::Join(
+                            Box::new(Ctx::Bind(
+                                fake_span(r1.map.get(&x).unwrap().clone()),
+                                fake_span(Type::Chan(fake_span(s1))),
+                            )),
+                            Box::new(Ctx::Bind(
+                                fake_span(r2.map.get(&x).unwrap().clone()),
+                                fake_span(Type::Chan(fake_span(s2))),
+                            )),
+                            JoinOrd::Ordered,
+                        );
+                    }
+                }
+            }
+            Ctx::Bind(fake_span(x), fake_span(t))
+        })
     }
 }
 

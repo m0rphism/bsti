@@ -5,6 +5,8 @@ pub mod lexer;
 pub mod parser;
 pub mod pretty;
 pub mod regex;
+pub mod ren;
+pub mod rep;
 pub mod semantics;
 pub mod syntax;
 pub mod type_checker;
@@ -50,12 +52,12 @@ pub fn run(args: &Args) -> Result<(), IErr> {
     }
     let (e, _t, _p) = typecheck(&src, args.verbose)?;
 
-    println!("===== EVALUATION =====");
-    let v = eval(&e).map_err(IErr::Eval)?;
-    println!(
-        "Program terminated successfully with value `{}`.",
-        pretty_def(&v)
-    );
+    //println!("===== EVALUATION =====");
+    //let v = eval(&e).map_err(IErr::Eval)?;
+    //println!(
+    //    "Program terminated successfully with value `{}`.",
+    //    pretty_def(&v)
+    //);
     Ok(())
 }
 
