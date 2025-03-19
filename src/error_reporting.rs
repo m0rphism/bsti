@@ -163,6 +163,21 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::MismatchLabel(e, l, t) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "The label '{}' is not part of the expected variant type '{}'.",
+                            l,
+                            pretty_def(&t),
+                        ),
+                    )],
+                );
+            }
             TypeError::TypeAnnotationMissing(e) => {
                 report(
                     &src,
@@ -245,6 +260,29 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::LeftOverVar(e, x, s, s_used) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "This expression binds variable '{}' to session type '{}', but {}",
+                            pretty_def(&x),
+                            pretty_def(&s),
+                            if let Some(s_used) = s_used {
+                                format!(
+                                    "only the following prefix was used in the body: {}",
+                                    pretty_def(&s_used)
+                                )
+                            } else {
+                                format!("the variable was not used in the body.")
+                            }
+                        ),
+                    )],
+                );
+            }
             TypeError::LeftOverCtx(e, ctx) => {
                 let mut xs = HashSet::new();
                 ctx.map_binds(&mut |x, t| {
@@ -260,7 +298,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!(
-                            "Leaf expression has unused variables that must be used: {}",
+                            "This expression has unused variables that must be used: {}",
                             pretty_def(&ctx)
                         ),
                     )],
@@ -322,6 +360,21 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!("Function clause needs to have at least one pattern.",),
+                    )],
+                );
+            }
+            TypeError::InvalidSplit(e, s, s1) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "The expected type {} is not a prefix of the variables type {}.",
+                            pretty_def(s1),
+                            pretty_def(s)
+                        ),
                     )],
                 );
             }

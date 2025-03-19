@@ -58,7 +58,10 @@ impl Pretty<UserState> for Type {
             }),
             Type::Variant(cs) => {
                 p.pp("<");
-                for (l, t) in cs {
+                for (i, (l, t)) in cs.iter().enumerate() {
+                    if i != 0 {
+                        p.pp(", ");
+                    }
                     p.pp(l);
                     p.pp(": ");
                     p.pp_prec(0, t);

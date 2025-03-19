@@ -1,4 +1,7 @@
-use crate::{regex, util::span::Spanned};
+use crate::{
+    regex,
+    util::span::{fake_span, Spanned},
+};
 use std::{collections::HashSet, hash::Hash};
 
 pub type Id = String;
@@ -134,6 +137,76 @@ pub fn union<T: Hash + Eq>(mut xs: HashSet<T>, ys: HashSet<T>) -> HashSet<T> {
     xs
 }
 
+impl SessionO {
+    pub fn split(&self, s1: &SessionB) -> Option<Self> {
+        match (self, s1) {
+            (_, SessionB::Return) => Some(self.clone()),
+            (SessionO::Op(op1, t1, s1), SessionB::Op(op2, t2, s2))
+                if op1 == op2 && t1.is_equal_to(&t2) =>
+            {
+                s1.split(&s2)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl SessionB {
+    pub fn split(&self, s1: &SessionB) -> Option<Self> {
+        match (self, s1) {
+            (_, SessionB::Return) => Some(self.clone()),
+            (SessionB::Op(op1, t1, s1), SessionB::Op(op2, t2, s2))
+                if op1 == op2 && t1.is_equal_to(&t2) =>
+            {
+                s1.split(&s2)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn join_owned(&self, s: &SessionO) -> SessionO {
+        match self {
+            SessionB::Op(o, t, s1) => {
+                SessionO::Op(o.clone(), t.clone(), Box::new(fake_span(s1.join_owned(s))))
+            }
+            SessionB::Return => s.clone(),
+        }
+    }
+
+    pub fn join_borrowed(&self, s: &SessionB) -> SessionB {
+        match self {
+            SessionB::Op(o, t, s1) => SessionB::Op(
+                o.clone(),
+                t.clone(),
+                Box::new(fake_span(s1.join_borrowed(s))),
+            ),
+            SessionB::Return => s.clone(),
+        }
+    }
+
+    pub fn join(&self, s: &Session) -> Session {
+        match s {
+            Session::Owned(s) => Session::Owned(fake_span(self.join_owned(s))),
+            Session::Borrowed(s) => Session::Borrowed(fake_span(self.join_borrowed(s))),
+        }
+    }
+}
+
+impl Session {
+    pub fn split(&self, s1: &SessionB) -> Option<Self> {
+        match self {
+            Session::Owned(s) => s.split(s1).map(|s2| Session::Owned(fake_span(s2))),
+            Session::Borrowed(s) => s.split(s1).map(|s2| Session::Borrowed(fake_span(s2))),
+        }
+    }
+    pub fn join(&self, s2: &Session) -> Session {
+        match self {
+            Session::Owned(s1) => Session::Owned(s1.clone()), // TODO: this should be okay
+            Session::Borrowed(s1) => s1.join(s2),
+        }
+    }
+}
+
 impl Expr {
     pub fn free_vars(&self) -> HashSet<Id> {
         match self {
@@ -195,19 +268,43 @@ impl Pattern {
     }
 }
 
-//impl SessionO {
-//    pub fn is_subtype_of(&self, other: &Self) -> bool {
-//        match (other, self) {
-//            (SessionO::Op(o1, t1, s1), SessionO::Op(o2, t2, s2)) => todo!(),
-//            (SessionO::Op(o1, t1, s1), SessionO::End(o2)) => todo!(),
-//            (SessionO::End(o1), SessionO::Op(o2, t2, s2)) => todo!(),
-//            (SessionO::End(o1), SessionO::End(o2)) => todo!(),
-//        }
-//    }
-//    pub fn is_equal_to(&self, other: &Self) -> bool {
-//        match (self, other) {}
-//    }
-//}
+impl SessionO {
+    //pub fn is_subtype_of(&self, other: &Self) -> bool {
+    //    match (other, self) {
+    //        (SessionO::Op(o1, t1, s1), SessionO::Op(o2, t2, s2)) => todo!(),
+    //        (SessionO::Op(o1, t1, s1), SessionO::End(o2)) => todo!(),
+    //        (SessionO::End(o1), SessionO::Op(o2, t2, s2)) => todo!(),
+    //        (SessionO::End(o1), SessionO::End(o2)) => todo!(),
+    //    }
+    //}
+    pub fn is_equal_to(&self, other: &Self) -> bool {
+        match (self, other) {
+            (SessionO::Op(op1, t1, s1), SessionO::Op(op2, t2, s2)) => {
+                op1 == op2 && t1.is_equal_to(t2) && s1.is_equal_to(s2)
+            }
+            (SessionO::Op(_, _, _), SessionO::End(_)) => false,
+            (SessionO::End(_), SessionO::Op(_, _, _)) => false,
+            (SessionO::End(op1), SessionO::End(op2)) => op1 == op2,
+        }
+    }
+}
+
+impl SessionB {
+    //pub fn is_subtype_of(&self, other: &Self) -> bool {
+    //    match (other, self) {
+    //    }
+    //}
+    pub fn is_equal_to(&self, other: &Self) -> bool {
+        match (self, other) {
+            (SessionB::Op(op1, t1, s1), SessionB::Op(op2, t2, s2)) => {
+                op1 == op2 && t1.is_equal_to(t2) && s1.is_equal_to(s2)
+            }
+            (SessionB::Op(_, _, _), SessionB::Return) => false,
+            (SessionB::Return, SessionB::Op(_, _, _)) => false,
+            (SessionB::Return, SessionB::Return) => true,
+        }
+    }
+}
 
 impl Session {
     pub fn is_subtype_of(&self, other: &Self) -> bool {
@@ -220,13 +317,12 @@ impl Session {
         //}
     }
     pub fn is_equal_to(&self, other: &Self) -> bool {
-        self == other
-        //match (self, other) {
-        //    (Session::Owned(s1), Session::Owned(s2)) => s1.is_equal_to(s2),
-        //    (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
-        //    (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
-        //    (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_equal_to(s2),
-        //}
+        match (self, other) {
+            (Session::Owned(s1), Session::Owned(s2)) => s1.is_equal_to(s2),
+            (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
+            (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
+            (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_equal_to(s2),
+        }
     }
 }
 

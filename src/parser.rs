@@ -69,6 +69,7 @@ peg::parser! {
               { SessionO::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
             / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_o() 
               { SessionO::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
+            / tok(ParenL) s:session_o() tok(ParenR) { s }
         pub rule ssession_o() -> SSessionO = spanned(<session_o()>)
 
         pub rule session_b() -> SessionB
@@ -77,6 +78,7 @@ peg::parser! {
               { SessionB::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
             / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_b() 
               { SessionB::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
+            / tok(ParenL) s:session_b() tok(ParenR) { s }
         pub rule ssession_b() -> SSessionB = spanned(<session_b()>)
 
         #[cache]

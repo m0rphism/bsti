@@ -1,4 +1,8 @@
-case &y {
-  foo x → { unit };
-  bar x → { unit };
-}
+inj foo unit : <foo: Unit, bar: Unit>
+
+# \x. &x : Chan return -[ u 0 ]-> Chan return
+
+# case &y {
+#   foo x → { unit };
+#   bar x → { unit };
+# }
