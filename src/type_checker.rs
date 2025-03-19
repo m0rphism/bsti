@@ -571,6 +571,33 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
+        Expr::Seq(e1, e2) => {
+            let fvs1 = e1.free_vars();
+
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            if t1.is_ord() {
+                return Err(TypeError::SeqDropsOrd(e.clone(), t1.clone()));
+            }
+
+            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let c2 = cc.fill(Ctx::Empty);
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
+        }
         Expr::LetPair(x, y, e1, e2) => {
             let fvs1 = e1.free_vars();
 
@@ -617,6 +644,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
+        Expr::LetDecl(x, t, cs, e2) => todo!(),
         Expr::CaseSum(e1, cs) => {
             let fvs1 = e1.free_vars();
 
@@ -805,34 +833,11 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let (u, eff) = check(ctx, e, t)?;
             Ok((t.clone(), u, eff))
         }
-        Expr::LetDecl(spanned, spanned1, vec, spanned2) => todo!(),
-        Expr::Seq(spanned, spanned1) => todo!(),
 
-        Expr::Abs(x, e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
-        Expr::Borrow(x) => Err(TypeError::TypeAnnotationMissing(e.clone())),
-        Expr::Inj(l, e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
+        Expr::Abs(_x, _e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
+        Expr::Borrow(_x) => Err(TypeError::TypeAnnotationMissing(e.clone())),
+        Expr::Inj(_l, _e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
     }
-    //    Expr::Seq(e1, e2) => {
-    //        let c1 = ctx.restrict(&e1.free_vars());
-    //        let c2 = ctx.restrict(&e2.free_vars());
-    //
-    //        let (t1, p1) = infer(&c1, e1)?;
-    //        let (t2, p2) = infer(&c2, e2)?;
-    //
-    //        if t1.is_ord() {
-    //            Err(TypeError::SeqDropsOrd(e.clone(), t1.clone()))?
-    //        }
-    //
-    //        let c12 = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered);
-    //        if !ctx.is_subctx_of(&c12) {
-    //            Err(TypeError::CtxSplitFailed(
-    //                e.clone(),
-    //                ctx.clone(),
-    //                c12.clone(),
-    //            ))?
-    //        }
-    //        Ok((t2, Eff::lub(p1, p2)))
-    //    }
     //    Expr::LetDecl(x, t, cs, e) => {
     //        let c = if cs.len() == 1 {
     //            cs.first_mut().unwrap()
