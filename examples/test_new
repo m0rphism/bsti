@@ -1,0 +1,4 @@
+case &y {
+  foo x → { unit };
+  bar x → { unit };
+}

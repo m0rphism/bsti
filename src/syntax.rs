@@ -23,25 +23,52 @@ pub enum Eff {
 }
 pub type SEff = Spanned<Eff>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SessionOp {
+    Send,
+    Recv,
+}
+pub type SSessionOp = Spanned<SessionOp>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SessionO {
+    Op(SessionOp, Box<SType>, Box<SSessionO>),
+    End(SessionOp),
+}
+pub type SSessionO = Spanned<SessionO>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SessionB {
+    Op(SessionOp, Box<SType>, Box<SSessionB>),
+    Return,
+}
+pub type SSessionB = Spanned<SessionB>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Session {
+    Owned(SSessionO),
+    Borrowed(SSessionB),
+}
+pub type SSession = Spanned<Session>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Unit,
-    Regex(SRegex),
+    Chan(SSession),
     Arr(SMult, SEff, Box<SType>, Box<SType>),
     Prod(SMult, Box<SType>, Box<SType>),
+    Variant(Vec<(SSumLabel, SType)>),
 }
 pub type SType = Spanned<Type>;
 
-pub type Regex = regex::Regex<u8>;
-pub type SRegex = Spanned<Regex>;
-
-pub type Word = String;
-pub type SWord = Spanned<Word>;
+pub type SumLabel = String;
+pub type SSumLabel = Spanned<SumLabel>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pattern {
     Var(SId),
     Pair(Box<SPattern>, Box<SPattern>),
+    Inj(SumLabel, Box<SPattern>),
 }
 pub type SPattern = Spanned<Pattern>;
 
@@ -55,22 +82,32 @@ pub type SClause = Spanned<Clause>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
-    Unit,
-    New(SRegex),
-    Write(SRegex, Box<SExpr>),
-    Split(SRegex, Box<SExpr>),
-    Drop(Box<SExpr>),
-    Loc(SLoc),
     Var(SId),
-    Abs(Option<SMult>, SId, Box<SExpr>),
-    App(Option<Mult>, Box<SExpr>, Box<SExpr>),
-    AppBorrow(Box<SExpr>, SId),
-    Pair(Option<SMult>, Box<SExpr>, Box<SExpr>),
-    LetPair(SId, SId, Box<SExpr>, Box<SExpr>),
-    LetDecl(SId, SType, Vec<SClause>, Box<SExpr>),
+    Abs(SId, Box<SExpr>),
+    App(Box<SExpr>, Box<SExpr>),
+    AppR(Box<SExpr>, Box<SExpr>),
+    Borrow(SId),
+
     Let(SId, Box<SExpr>, Box<SExpr>),
-    Seq(Box<SExpr>, Box<SExpr>),
+
+    Pair(Box<SExpr>, Box<SExpr>),
+    LetPair(SId, SId, Box<SExpr>, Box<SExpr>),
+
+    Inj(SSumLabel, Box<SExpr>),
+    CaseSum(Box<SExpr>, Vec<(SSumLabel, SId, SExpr)>),
+
+    Fork(Box<SExpr>),
+    New(SSessionO),
+    Send(Box<SExpr>, Box<SExpr>),
+    Recv(Box<SExpr>),
+    Drop(Box<SExpr>),
+    End(SessionOp, Box<SExpr>),
+    Unit,
+
     Ann(Box<SExpr>, SType),
+
+    LetDecl(SId, SType, Vec<SClause>, Box<SExpr>),
+    Seq(Box<SExpr>, Box<SExpr>),
     // Int(i64),
     // Float(f64),
     // String(String),
@@ -102,15 +139,11 @@ impl Expr {
         match self {
             Expr::Unit => HashSet::new(),
             Expr::New(_r) => HashSet::new(),
-            Expr::Write(_w, e) => e.free_vars(),
-            Expr::Split(_r, e) => e.free_vars(),
             Expr::Drop(e) => e.free_vars(),
-            Expr::Loc(_l) => HashSet::new(),
             Expr::Var(x) => HashSet::from([x.val.clone()]),
-            Expr::Abs(_m, x, e) => without(e.free_vars(), &x.val),
-            Expr::App(_om, e1, e2) => union(e1.free_vars(), e2.free_vars()),
-            Expr::AppBorrow(e, x) => union(e.free_vars(), HashSet::from([x.val.clone()])),
-            Expr::Pair(_m, e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::Abs(x, e) => without(e.free_vars(), &x.val),
+            Expr::App(e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::Pair(e1, e2) => union(e1.free_vars(), e2.free_vars()),
             Expr::LetPair(x, y, e1, e2) => {
                 union(e1.free_vars(), without(without(e2.free_vars(), y), x))
             }
@@ -124,6 +157,20 @@ impl Expr {
                 }
                 union(xs, e.free_vars())
             }
+            Expr::AppR(e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::Borrow(x) => HashSet::from([x.val.clone()]),
+            Expr::Inj(_l, e) => e.free_vars(),
+            Expr::CaseSum(e, cs) => {
+                let mut xs = e.free_vars();
+                for (_l, x, e) in cs {
+                    xs = union(xs, without(e.free_vars(), &x.val));
+                }
+                xs
+            }
+            Expr::Fork(e) => e.free_vars(),
+            Expr::Send(e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::Recv(e) => e.free_vars(),
+            Expr::End(_l, e) => e.free_vars(),
         }
     }
 }
@@ -143,7 +190,43 @@ impl Pattern {
         match self {
             Pattern::Var(x) => HashSet::from([x.val.clone()]),
             Pattern::Pair(p1, p2) => union(p1.bound_vars(), p2.bound_vars()),
+            Pattern::Inj(_l, p) => p.bound_vars(),
         }
+    }
+}
+
+//impl SessionO {
+//    pub fn is_subtype_of(&self, other: &Self) -> bool {
+//        match (other, self) {
+//            (SessionO::Op(o1, t1, s1), SessionO::Op(o2, t2, s2)) => todo!(),
+//            (SessionO::Op(o1, t1, s1), SessionO::End(o2)) => todo!(),
+//            (SessionO::End(o1), SessionO::Op(o2, t2, s2)) => todo!(),
+//            (SessionO::End(o1), SessionO::End(o2)) => todo!(),
+//        }
+//    }
+//    pub fn is_equal_to(&self, other: &Self) -> bool {
+//        match (self, other) {}
+//    }
+//}
+
+impl Session {
+    pub fn is_subtype_of(&self, other: &Self) -> bool {
+        unimplemented!()
+        //match (self, other) {
+        //    (Session::Owned(s1), Session::Owned(s2)) => s1.is_subtype_of(s2),
+        //    (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
+        //    (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
+        //    (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_subtype_of(s2),
+        //}
+    }
+    pub fn is_equal_to(&self, other: &Self) -> bool {
+        self == other
+        //match (self, other) {
+        //    (Session::Owned(s1), Session::Owned(s2)) => s1.is_equal_to(s2),
+        //    (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
+        //    (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
+        //    (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_equal_to(s2),
+        //}
     }
 }
 
@@ -151,7 +234,7 @@ impl Type {
     pub fn is_subtype_of(&self, other: &Type) -> bool {
         match (self, other) {
             (Type::Unit, Type::Unit) => true,
-            (Type::Regex(r1), Type::Regex(r2)) => r1.is_subseteq_of(r2),
+            (Type::Chan(s1), Type::Chan(s2)) => s1.is_subtype_of(s2),
             (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
                 m1.val == m2.val
                     && p1.val == p2.val
@@ -167,7 +250,7 @@ impl Type {
     pub fn is_equal_to(&self, other: &Type) -> bool {
         match (self, other) {
             (Type::Unit, Type::Unit) => true,
-            (Type::Regex(r1), Type::Regex(r2)) => r1.is_equal_to(r2),
+            (Type::Chan(s1), Type::Chan(s2)) => s1.is_equal_to(s2),
             (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
                 m1.val == m2.val && p1.val == p2.val && t11.is_equal_to(t21) && t12.is_equal_to(t22)
             }
@@ -181,9 +264,10 @@ impl Type {
     pub fn is_unr(&self) -> bool {
         match self {
             Type::Unit => true,
-            Type::Regex(_) => false,
+            Type::Chan(_) => false,
             Type::Arr(m, _, _, _) => m.val == Mult::Unr,
             Type::Prod(m, _, _) => m.val == Mult::Unr,
+            Type::Variant(cs) => cs.iter().all(|(_, t)| t.is_unr()),
         }
     }
 

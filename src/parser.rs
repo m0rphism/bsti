@@ -1,6 +1,4 @@
 use crate::lexer::Token;
-use crate::regex::parser::regex_parser;
-use crate::regex::Regex as RegexS;
 use crate::syntax::Eff as EffS;
 use crate::syntax::Id as IdS;
 use crate::syntax::*;
@@ -64,6 +62,29 @@ peg::parser! {
 
         // Types
 
+        pub rule session_o() -> SessionO
+            = tok(Wait) { SessionO::End(SessionOp::Recv) }
+            / tok(Term) { SessionO::End(SessionOp::Send) }
+            / tok(Bang) t:stype_atom() tok(Period) s:ssession_o() 
+              { SessionO::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
+            / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_o() 
+              { SessionO::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
+        pub rule ssession_o() -> SSessionO = spanned(<session_o()>)
+
+        pub rule session_b() -> SessionB
+            = tok(Return) { SessionB::Return }
+            / tok(Bang) t:stype_atom() tok(Period) s:ssession_b() 
+              { SessionB::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
+            / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_b() 
+              { SessionB::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
+        pub rule ssession_b() -> SSessionB = spanned(<session_b()>)
+
+        #[cache]
+        pub rule session() -> Session
+            = s:ssession_o() { Session::Owned(s) }
+            / s:ssession_b() { Session::Borrowed(s) }
+        pub rule ssession() -> SSession = spanned(<session()>)
+
         pub rule type_() -> Type = t:type_arrow() { t }
         pub rule stype() -> SType = spanned(<type_()>)
 
@@ -89,7 +110,8 @@ peg::parser! {
         pub rule type_atom() -> Type
             = tok(UnitT) { Type::Unit }
             / tok(ParenL) t:type_() tok(ParenR) { t }
-            / r:sregex() { Type::Regex(r) }
+            / tok(Chan) s:ssession() { Type::Chan(s) }
+            / tok(Lt) cs:((l:sid() tok(Colon) t:stype() { (l , t) }) ** tok(Comma)) tok(Comma)? tok(Gt) { Type::Variant(cs) }
         pub rule stype_atom() -> SType = spanned(<type_atom()>)
 
         // Expressions
@@ -102,13 +124,14 @@ peg::parser! {
             / e:expr_lam() { e }
         pub rule sexpr_ann() -> SExpr = spanned(<expr_ann()>)
 
-        pub rule smult_opt() -> Option<SMult>
-            = om:(tok(BracketL) m:smult() tok(BracketR) { m })? { om }
-
         #[cache]
         pub rule expr_lam() -> Expr
-            = tok(Lambda) m:smult_opt() x:sid() tok(Period) e:sexpr_lam()
-              { Expr::Abs(m, x, Box::new(e)) }
+            = tok(Lambda) x:sid() tok(Period) e:sexpr_lam()
+              { Expr::Abs(x, Box::new(e)) }
+            / tok(Case) e:sexpr() tok(BraceL)
+              cs:((tok(Inj)? l:sid() x:sid() tok(Arrow) tok(BraceL) e:sexpr() tok(BraceR) { (l, x, e) }) ** tok(Semicolon))
+              tok(Semicolon)? tok(BraceR)
+              { Expr::CaseSum(Box::new(e), cs) }
             / tok(Let) x:sid() tok(Comma) y:sid() tok(Equals) e1:sexpr_ann() tok(In) e2:sexpr_lam()
               { Expr::LetPair(x, y, Box::new(e1), Box::new(e2)) }
             / tok(Let) x:sid() tok(Equals) e1:sexpr_ann() tok(In) e2:sexpr_lam()
@@ -126,36 +149,28 @@ peg::parser! {
 
         #[cache_left_rec]
         pub rule expr_app() -> Expr
-            = tok(New) r:sregex() { Expr::New(r) }
-            / tok(Bang) w:sregex() e:sexpr_atom() { Expr::Write(w, Box::new(e)) }
-            / tok(Split) r:sregex() e:sexpr_atom() { Expr::Split(r, Box::new(e)) }
+            = tok(New) s:ssession_o() { Expr::New(s) }
+            / tok(Send) e1:sexpr_atom() e2:sexpr_atom() { Expr::Send(Box::new(e1), Box::new(e2)) }
+            / tok(Recv) e:sexpr_atom() { Expr::Recv(Box::new(e)) }
             / tok(Drop) e:sexpr_atom() { Expr::Drop(Box::new(e)) }
-            / e1:sexpr_app() tok(Amp) x:sid() { Expr::AppBorrow(Box::new(e1), x) }
-            / e1:sexpr_app() e2:sexpr_atom() { Expr::App(None, Box::new(e1), Box::new(e2)) }
+            / tok(Term) e:sexpr_atom() { Expr::End(SessionOp::Send, Box::new(e)) }
+            / tok(Wait) e:sexpr_atom() { Expr::End(SessionOp::Recv, Box::new(e)) }
+            / tok(Inj) l:sid() e:sexpr_atom() { Expr::Inj(l, Box::new(e)) }
+            / tok(Fork) e:sexpr_atom() { Expr::Fork(Box::new(e)) }
+            / e1:sexpr_app() tok(TriRight) e2:sexpr_atom() { Expr::AppR(Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_app() e2:sexpr_atom() { Expr::App(Box::new(e1), Box::new(e2)) }
             / e:expr_atom() { e }
         pub rule sexpr_app() -> SExpr = spanned(<expr_app()>)
 
         #[cache]
         pub rule expr_atom() -> Expr
             = tok(ParenL) e:expr() tok(ParenR) { e }
-            / tok(ParenL) e1:sexpr() tok(Comma) m:smult_opt() e2:sexpr() tok(ParenR)
-              { Expr::Pair(m, Box::new(e1), Box::new(e2)) }
+            / tok(ParenL) e1:sexpr() tok(Comma) e2:sexpr() tok(ParenR)
+              { Expr::Pair(Box::new(e1), Box::new(e2)) }
             / tok(Unit) { Expr::Unit }
+            / tok(Amp) x:sid() { Expr::Borrow(x) }
             / x:sid() { Expr::Var(x.to_owned()) }
         pub rule sexpr_atom() -> SExpr = spanned(<expr_atom()>)
-
-        // Regular Expressions
-
-        pub rule regex() -> RegexS<u8>
-            = quiet!{[Tok(Regex(""))] { crate::regex::Regex::Eps }}
-            / quiet!{[Tok(Regex(s))] {? regex_parser::expr_u8(s).map_err(|e| "Failed parsing regex") }}
-            / expected!("regex")
-        pub rule sregex() -> SRegex = spanned(<regex()>)
-
-        // Regular Expression Words
-
-        pub rule word() -> Word = quiet!{[Tok(Str(s))] { s.to_string() }} / expected!("string")
-        pub rule sword() -> SWord = spanned(<word()>)
 
         // Declarations
 

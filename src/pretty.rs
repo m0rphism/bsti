@@ -1,7 +1,11 @@
 use crate::{
-    syntax::{Clause, Eff, Expr, Mult, Pattern, SMult, Type},
-    util::pretty::{Assoc, Pretty, PrettyEnv},
-    util::span::Spanned,
+    syntax::{
+        Clause, Eff, Expr, Mult, Pattern, SMult, Session, SessionB, SessionO, SessionOp, Type,
+    },
+    util::{
+        pretty::{Assoc, Pretty, PrettyEnv},
+        span::Spanned,
+    },
 };
 
 // #[derive(Clone)]
@@ -22,11 +26,6 @@ impl Pretty<UserState> for Type {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
             Type::Unit => p.pp("Unit"),
-            Type::Regex(r) => {
-                p.pp("{");
-                p.pp_prec(0, r);
-                p.pp("}");
-            }
             Type::Arr(m, e, t1, t2) => p.infix(2, R, |p| {
                 p.pp_arg(L, t1);
                 p.pp(" –[");
@@ -36,7 +35,7 @@ impl Pretty<UserState> for Type {
                 p.pp("]→ ");
                 p.pp_arg(R, t2);
             }),
-            Type::Prod(m, t1, t2) => p.infix(2, N, |p| {
+            Type::Prod(m, t1, t2) => p.infix(3, N, |p| {
                 p.pp_arg(L, t1);
                 match m.val {
                     Mult::Lin => {
@@ -53,6 +52,65 @@ impl Pretty<UserState> for Type {
                 }
                 p.pp_arg(R, t2);
             }),
+            Type::Chan(s) => p.infix(4, N, |p| {
+                p.pp("Chan ");
+                p.pp_arg(R, s);
+            }),
+            Type::Variant(cs) => {
+                p.pp("<");
+                for (l, t) in cs {
+                    p.pp(l);
+                    p.pp(": ");
+                    p.pp_prec(0, t);
+                }
+                p.pp(">");
+            }
+        }
+    }
+}
+
+impl Pretty<UserState> for Session {
+    fn pp(&self, p: &mut PrettyEnv<UserState>) {
+        match self {
+            Session::Owned(s) => p.pp(s),
+            Session::Borrowed(s) => p.pp(s),
+        }
+    }
+}
+
+impl Pretty<UserState> for SessionO {
+    fn pp(&self, p: &mut PrettyEnv<UserState>) {
+        match self {
+            SessionO::Op(op, t, s) => p.infix(0, R, |p| {
+                match op {
+                    SessionOp::Send => p.pp("!"),
+                    SessionOp::Recv => p.pp("?"),
+                }
+                p.pp_prec(10, t);
+                p.pp(". ");
+                p.pp(s);
+            }),
+            SessionO::End(op) => match op {
+                SessionOp::Send => p.pp("term"),
+                SessionOp::Recv => p.pp("wait"),
+            },
+        }
+    }
+}
+
+impl Pretty<UserState> for SessionB {
+    fn pp(&self, p: &mut PrettyEnv<UserState>) {
+        match self {
+            SessionB::Op(op, t, s) => p.infix(0, R, |p| {
+                match op {
+                    SessionOp::Send => p.pp("!"),
+                    SessionOp::Recv => p.pp("?"),
+                }
+                p.pp_prec(10, t);
+                p.pp(". ");
+                p.pp(s);
+            }),
+            SessionB::Return => p.pp("return"),
         }
     }
 }
@@ -90,20 +148,6 @@ impl Pretty<UserState> for Eff {
     }
 }
 
-// impl Pretty<UserState> for Regex {
-//     fn pp(&self, p: &mut PrettyEnv<UserState>) {
-//         p.pp("<");
-//         p.pp(self);
-//         p.pp(">");
-//     }
-// }
-
-// impl Pretty<UserState> for Word {
-//     fn pp(&self, p: &mut PrettyEnv<UserState>) {
-//         p
-//     }
-// }
-
 impl Pretty<UserState> for Expr {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
@@ -113,55 +157,60 @@ impl Pretty<UserState> for Expr {
                 p.pp_prec(0, r);
                 p.pp("}")
             }),
-            Expr::Write(w, e) => p.infix(3, L, |p| {
-                p.pp("!{");
-                p.pp(w);
-                p.pp("} ");
-                p.pp_arg(R, e);
-            }),
-            Expr::Split(r, e) => p.infix(3, L, |p| {
-                p.pp("split ");
-                p.pp(r);
-                p.pp(" ");
-                p.pp_arg(R, e);
-            }),
             Expr::Drop(e) => p.infix(2, L, |p| {
                 p.pp("drop ");
                 p.pp_arg(R, e);
             }),
             Expr::Var(x) => p.str(&x.val),
-            Expr::Abs(om, x, e) => p.infix(1, R, |p| {
+            Expr::Abs(x, e) => p.infix(1, R, |p| {
                 p.pp("λ");
-                p.pp(om);
                 p.pp(x);
                 p.pp(". ");
                 p.pp_arg(R, e);
                 p.pp("");
             }),
-            Expr::App(om, e1, e2) => p.infix(3, L, |p| {
+            Expr::App(e1, e2) => p.infix(3, L, |p| {
                 p.pp_arg(L, e1);
                 p.pp(" ");
-                if let Some(m) = om {
-                    p.pp("[");
-                    p.pp(m);
-                    p.pp("] ");
-                }
                 p.pp_arg(R, e2);
             }),
-            Expr::AppBorrow(e1, e2) => p.infix(3, L, |p| {
+            Expr::AppR(e1, e2) => p.infix(3, L, |p| {
                 p.pp_arg(L, e1);
-                p.pp(" &");
+                p.pp(" |> ");
                 p.pp_arg(R, e2);
             }),
-            Expr::Loc(l) => {
-                p.pp(&format!("#{l:?}"));
-            }
-            Expr::Pair(om, e1, e2) => {
+            Expr::Inj(l, e) => p.infix(3, L, |p| {
+                p.pp("inj ");
+                p.pp(l);
+                p.pp(" ");
+                p.pp_arg(R, e);
+            }),
+            Expr::Fork(e) => p.infix(3, L, |p| {
+                p.pp("fork ");
+                p.pp_arg(R, e);
+            }),
+            Expr::Send(e1, e2) => p.infix(3, L, |p| {
+                p.pp("send ");
+                p.pp_arg(R, e1);
+                p.pp(" ");
+                p.pp_arg(R, e2);
+            }),
+            Expr::Recv(e) => p.infix(3, L, |p| {
+                p.pp("recv ");
+                p.pp_arg(R, e);
+            }),
+            Expr::End(op, e) => p.infix(3, L, |p| {
+                match op {
+                    SessionOp::Send => p.pp("term"),
+                    SessionOp::Recv => p.pp("wait"),
+                }
+                p.pp(" ");
+                p.pp_arg(R, e);
+            }),
+            Expr::Pair(e1, e2) => {
                 p.pp("(");
                 p.pp(e1);
-                p.pp(",");
-                p.pp(om);
-                p.pp(" ");
+                p.pp(", ");
                 p.pp(e2);
                 p.pp(")");
             }
@@ -183,6 +232,20 @@ impl Pretty<UserState> for Expr {
                 p.pp(" in ");
                 p.pp(e2);
             }),
+            Expr::CaseSum(e, cs) => p.infix(1, R, |p| {
+                p.pp("case ");
+                p.pp(e);
+                p.pp(" { ");
+                for (l, x, e) in cs {
+                    p.pp("inj ");
+                    p.pp(l);
+                    p.pp(" ");
+                    p.pp(x);
+                    p.pp(" → ");
+                    p.pp_prec(0, e);
+                }
+                p.pp(" }");
+            }),
             Expr::Ann(e, t) => {
                 p.pp(e);
                 p.pp(" : ");
@@ -203,6 +266,10 @@ impl Pretty<UserState> for Expr {
                 }
                 p.pp("\n");
                 p.pp(e)
+            }
+            Expr::Borrow(x) => {
+                p.pp("&");
+                p.pp(x);
             }
         }
     }
@@ -233,6 +300,7 @@ impl Pretty<UserState> for Pattern {
                 p.pp(p2);
                 p.pp(")");
             }
+            Pattern::Inj(sum_label, spanned) => todo!(),
         }
     }
 }

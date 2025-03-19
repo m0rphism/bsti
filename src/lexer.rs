@@ -76,6 +76,26 @@ pub enum Token<'a> {
     Pure,
     #[token("eff")]
     Eff,
+    #[token("send")]
+    Send,
+    #[token("recv")]
+    Recv,
+    #[token("return")]
+    Return,
+    #[token("wait")]
+    Wait,
+    #[token("term")]
+    Term,
+    #[token("Chan")]
+    Chan,
+    #[token("|>")]
+    TriRight,
+    #[token("case")]
+    Case,
+    #[token("inj")]
+    Inj,
+    #[regex("fork|spawn")]
+    Fork,
 
     // Operators
     #[token(";")]
@@ -96,6 +116,8 @@ pub enum Token<'a> {
     Plus,
     #[regex("->|→")]
     Arrow,
+    #[regex("=>|⇒")]
+    DoubleArrow,
     #[regex("-|–")]
     Minus,
     #[token("*")]
@@ -122,6 +144,8 @@ pub enum Token<'a> {
     BangEquals,
     #[token("!")]
     Bang,
+    #[token("?")]
+    QuestionMark,
     #[token("=")]
     Equals,
     #[token(",")]
@@ -138,9 +162,6 @@ pub enum Token<'a> {
     Pipe,
     #[token("&")]
     Amp,
-
-    #[regex(r"\{(\\\}|[^}])*\}", |lex| &lex.slice()[1..lex.slice().len()-1])]
-    Regex(&'a str),
 
     // Positive Int
     #[regex(r"[0-9]+", |lex| lex.slice().parse().map_err(|_| LexingError::Int))]
@@ -235,7 +256,6 @@ impl<'a> Token<'a> {
             Token::Lambda => "λ",
             Token::Pipe => "|",
             Token::Amp => "&",
-            Token::Regex(_r) => "regex",
             Token::Int(_x) => "int",
             Token::Float(_x) => "float",
             Token::Str(_x) => "string",
@@ -243,6 +263,18 @@ impl<'a> Token<'a> {
             Token::NewLine => "\\n",
             Token::StarOrdL => "⊗",
             Token::StarLin => "⊙",
+            Token::Send => "send",
+            Token::Recv => "recv",
+            Token::Return => "return",
+            Token::Wait => "wait",
+            Token::Term => "term",
+            Token::Chan => "Chan",
+            Token::TriRight => "|>",
+            Token::Case => "case",
+            Token::Inj => "inj",
+            Token::Fork => "fork",
+            Token::DoubleArrow => "=>",
+            Token::QuestionMark => "?",
         }
     }
 }
