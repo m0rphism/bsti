@@ -137,6 +137,15 @@ pub fn union<T: Hash + Eq>(mut xs: HashSet<T>, ys: HashSet<T>) -> HashSet<T> {
     xs
 }
 
+impl SessionOp {
+    pub fn dual(self) -> Self {
+        match self {
+            SessionOp::Send => SessionOp::Recv,
+            SessionOp::Recv => SessionOp::Send,
+        }
+    }
+}
+
 impl SessionO {
     pub fn split(&self, s1: &SessionB) -> Option<Self> {
         match (self, s1) {
@@ -147,6 +156,14 @@ impl SessionO {
                 s1.split(&s2)
             }
             _ => None,
+        }
+    }
+    pub fn dual(&self) -> Self {
+        match self {
+            SessionO::Op(op, t, s) => {
+                SessionO::Op(op.dual(), t.clone(), Box::new(fake_span(s.dual())))
+            }
+            SessionO::End(op) => SessionO::End(op.dual()),
         }
     }
 }
@@ -161,6 +178,15 @@ impl SessionB {
                 s1.split(&s2)
             }
             _ => None,
+        }
+    }
+
+    pub fn dual(&self) -> Self {
+        match self {
+            SessionB::Op(op, t, s) => {
+                SessionB::Op(op.dual(), t.clone(), Box::new(fake_span(s.dual())))
+            }
+            SessionB::Return => SessionB::Return,
         }
     }
 
@@ -197,6 +223,12 @@ impl Session {
         match self {
             Session::Owned(s) => s.split(s1).map(|s2| Session::Owned(fake_span(s2))),
             Session::Borrowed(s) => s.split(s1).map(|s2| Session::Borrowed(fake_span(s2))),
+        }
+    }
+    pub fn dual(&self) -> Self {
+        match self {
+            Session::Owned(s) => Session::Owned(fake_span(s.dual())),
+            Session::Borrowed(s) => Session::Borrowed(fake_span(s.dual())),
         }
     }
     pub fn join(&self, s2: &Session) -> Session {

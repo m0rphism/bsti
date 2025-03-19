@@ -5,7 +5,7 @@ use crate::{
     rep::Rep,
     syntax::{
         Eff, Expr, Id, Mult, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession, SSessionB,
-        SType, Session, SessionB, SumLabel, Type,
+        SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::span::fake_span,
@@ -573,7 +573,6 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         }
         Expr::LetPair(x, y, e1, e2) => {
             let fvs1 = e1.free_vars();
-            let fvs2 = e2.free_vars();
 
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
@@ -688,9 +687,49 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
-        Expr::Fork(spanned) => todo!(),
-        Expr::New(spanned) => todo!(),
-        Expr::Send(spanned, spanned1) => todo!(),
+        Expr::Fork(e1) => {
+            let (t, u, _p) = infer(ctx, e1)?;
+            let Type::Unit = t.val else {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Err("Unit".into()),
+                    t.clone(),
+                ));
+            };
+            Ok((fake_span(Type::Unit), u, Eff::No))
+        }
+        Expr::New(s) => {
+            assert_unr_ctx(&e, &ctx)?;
+            let t = fake_span(Type::Prod(
+                fake_span(Mult::OrdL),
+                Box::new(fake_span(Type::Chan(fake_span(Session::Owned(s.clone()))))),
+                Box::new(fake_span(Type::Chan(fake_span(Session::Owned(fake_span(
+                    s.dual(),
+                )))))),
+            ));
+            Ok((t, Rep::empty(), Eff::No))
+        }
+        Expr::Send(e1, e2) => {
+            let fvs1 = e1.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let t2 = fake_span(Type::Chan(fake_span(Session::Borrowed(fake_span(
+                SessionB::Op(
+                    SessionOp::Send,
+                    Box::new(t1.clone()),
+                    Box::new(fake_span(SessionB::Return)),
+                ),
+            )))));
+
+            let fvs2 = e2.free_vars();
+            let c2 = ctx.restrict(&fvs2).split_off(&u1);
+            let (u2, p2) = check(&c2, e2, &t2)?;
+
+            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, JoinOrd::Unordered)?;
+
+            Ok((fake_span(Type::Unit), u1.join(&u2), Eff::lub(p1, p2)))
+        }
         Expr::Recv(spanned) => todo!(),
         Expr::Drop(spanned) => todo!(),
         Expr::End(session_op, spanned) => todo!(),
