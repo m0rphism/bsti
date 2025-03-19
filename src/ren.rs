@@ -50,4 +50,12 @@ impl Ren {
         }
         Self { map }
     }
+
+    pub fn invert(&self) -> Self {
+        let mut map = HashMap::new();
+        for (x, y) in &self.map {
+            map.insert(y.clone(), x.clone());
+        }
+        Self { map }
+    }
 }

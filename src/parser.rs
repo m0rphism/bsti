@@ -131,10 +131,10 @@ peg::parser! {
             = tok(Lambda) x:sid() tok(Period) e:sexpr_lam()
               { Expr::Abs(x, Box::new(e)) }
             / tok(Case) e:sexpr() tok(BraceL)
-              cs:((tok(Inj)? l:sid() x:sid() tok(Arrow) tok(BraceL) e:sexpr() tok(BraceR) { (l, x, e) }) ** tok(Semicolon))
+              cs:((tok(Inj)? l:sid() x:sid() tok(Arrow) tok(BraceL) e:sexpr() tok(BraceR) { (l, x, e) }) ** (tok(Semicolon)?))
               tok(Semicolon)? tok(BraceR)
               { Expr::CaseSum(Box::new(e), cs) }
-            / tok(Let) x:sid() tok(Comma) y:sid() tok(Equals) e1:sexpr_ann() tok(In) e2:sexpr_lam()
+            / tok(Let) tok(ParenL)? x:sid() tok(Comma) y:sid() tok(ParenR)? tok(Equals) e1:sexpr_ann() tok(In) e2:sexpr_lam()
               { Expr::LetPair(x, y, Box::new(e1), Box::new(e2)) }
             / tok(Let) x:sid() tok(Equals) e1:sexpr_ann() tok(In) e2:sexpr_lam()
               { Expr::Let(x, Box::new(e1), Box::new(e2)) }

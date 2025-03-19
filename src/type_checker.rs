@@ -7,7 +7,7 @@ use crate::{
         Eff, Expr, Id, Mult, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession, SSessionB,
         SType, Session, SessionB, SumLabel, Type,
     },
-    type_context::{ext, Ctx, CtxS, JoinOrd},
+    type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::span::fake_span,
 };
 
@@ -38,6 +38,231 @@ pub enum TypeError {
     PatternMismatch(SPattern, SType),
     ClauseWithWrongId(SExpr, SId, SId),
     ClauseWithZeroPatterns(SExpr),
+    CaseMissingLabel(SExpr, SType, SumLabel),
+    CaseExtraLabel(SExpr, SType, SumLabel),
+    CaseDuplicateLabel(SExpr, SType, SumLabel),
+    CaseClauseTypeMismatch(SExpr, SType, SType),
+    CaseLeftOverMismatch(SExpr, Id, Session, Option<Session>),
+    VariantEmpty(SExpr),
+    VariantDuplicateLabel(SExpr, SType, SumLabel),
+}
+
+pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
+    match &t.val {
+        Type::Chan(s) => {
+            if let Some(s2) = u.map.get(&x.val) {
+                if !s.is_equal_to(s2) {
+                    Err(TypeError::LeftOverVar(
+                        e.clone(),
+                        x.clone(),
+                        s.clone(),
+                        Some(s2.clone()),
+                    ))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(TypeError::LeftOverVar(
+                    e.clone(),
+                    x.clone(),
+                    s.clone(),
+                    None,
+                ))
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, SessionB> {
+    let mut sis = HashMap::new();
+    for x in fvs {
+        if let Some(Session::Borrowed(s)) = u.map.get(x) {
+            sis.insert(x.clone(), s.val.clone());
+        }
+    }
+    sis
+}
+
+pub fn rename_vars(r: &Ren, xs: &HashSet<Id>) -> HashSet<Id> {
+    let mut out = HashSet::new();
+    xs.iter().map(|x| {
+        if let Some(y) = r.map.get(x) {
+            out.insert(y.clone());
+        }
+        out.insert(x.clone());
+    });
+    out
+}
+
+pub fn intersection<T: std::hash::Hash + Eq + Clone>(
+    xss: impl IntoIterator<Item = HashSet<T>>,
+) -> HashSet<T> {
+    let mut out = HashSet::new();
+    for xs in xss {
+        out = out.intersection(&xs).cloned().collect();
+    }
+    out
+}
+
+pub fn check_split_alg_gen(
+    e: &SExpr,
+    u1: &Rep,
+    u2: &Rep,
+    e1: &SExpr,
+    e2s: &[&SExpr],
+    ctx: &Ctx,
+    ctx1: &Ctx,
+    cc2: &CtxCtx,
+) -> Result<(), TypeError> {
+    let fvs1 = e1.free_vars();
+    let fvs2 = intersection(e2s.iter().map(|e| e.free_vars()));
+    let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
+    let sis = split_infos(&fvs, &u1);
+    let r1 = Ren::fresh_from(sis.keys(), "1");
+    let r2 = Ren::fresh_from(sis.keys(), "2");
+    let u = u1.join(u2);
+    let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
+
+    let c12 = cc2
+        .replace(u2)
+        .rename(&r1)
+        .fill(ctx1.replace(u1).rename(&r2));
+    if !ctx_split.is_subctx_of(&c12) {
+        Err(TypeError::CtxSplitFailed(
+            e.clone(),
+            ctx_split.clone(),
+            c12.clone(),
+        ))?
+    }
+    Ok(())
+}
+
+pub fn check_split_alg(
+    e: &SExpr,
+    u1: &Rep,
+    u2: &Rep,
+    e1: &SExpr,
+    e2: &SExpr,
+    ctx: &Ctx,
+    ctx1: &Ctx,
+    ctx2: &Ctx,
+    o: JoinOrd,
+) -> Result<(), TypeError> {
+    let cc2 = CtxCtx::JoinL(Box::new(CtxCtx::Hole), Box::new(ctx2.clone()), o);
+    check_split_alg_gen(e, u1, u2, e1, &[e2], ctx, ctx1, &cc2)
+}
+
+pub fn compute_ctx_ctx(
+    e: &SExpr,
+    u1: &Rep,
+    e1: &SExpr,
+    e2s: &[&SExpr],
+    ctx: &Ctx,
+) -> Result<CtxCtx, TypeError> {
+    let fvs1 = e1.free_vars();
+    let fvs2 = intersection(e2s.iter().map(|e| e.free_vars()));
+    let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
+    let sis = split_infos(&fvs, &u1);
+    let r1 = Ren::fresh_from(sis.keys(), "1");
+    let r2 = Ren::fresh_from(sis.keys(), "2");
+    let ctx_split = ctx.split_ctx(&sis, &r1, &r2);
+    let fvs1r1 = rename_vars(&r1, &fvs1);
+    let (cc, _) = match ctx_split.split(&fvs1r1) {
+        Some((cc, c)) => (cc, c),
+        None => Err(TypeError::CtxCtxSplitFailed(
+            e.clone(),
+            ctx_split.clone(),
+            fvs1r1,
+        ))?,
+    };
+    let cc = cc.rename(&r2.invert());
+    Ok(cc)
+}
+
+pub fn check_variant_label_eq(
+    e: &SExpr,
+    t: &SType,
+    actual: &[&SumLabel],
+    expected: &[&SumLabel],
+) -> Result<(), TypeError> {
+    if actual.len() == 0 {
+        return Err(TypeError::VariantEmpty(e.clone()));
+    }
+    for l in actual {
+        if !expected.contains(l) {
+            return Err(TypeError::CaseExtraLabel(
+                e.clone(),
+                t.clone(),
+                (*l).clone(),
+            ));
+        }
+    }
+    for l in expected {
+        if !actual.contains(l) {
+            return Err(TypeError::CaseMissingLabel(
+                e.clone(),
+                t.clone(),
+                (*l).clone(),
+            ));
+        }
+    }
+    for (i, l) in actual.iter().enumerate() {
+        if i != actual.len() {
+            if (&actual[i + 1..]).contains(l) {
+                return Err(TypeError::CaseDuplicateLabel(
+                    e.clone(),
+                    t.clone(),
+                    (*l).clone(),
+                ));
+            }
+        }
+    }
+    for (i, l) in expected.iter().enumerate() {
+        if i != expected.len() {
+            if (&expected[i + 1..]).contains(l) {
+                return Err(TypeError::VariantDuplicateLabel(
+                    e.clone(),
+                    t.clone(),
+                    (*l).clone(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
+    for (x, s1) in &u1.map {
+        if let Some(s2) = u2.map.get(x) {
+            if !s1.is_equal_to(s2) {
+                return Err(TypeError::CaseLeftOverMismatch(
+                    e.clone(),
+                    x.clone(),
+                    s1.clone(),
+                    Some(s2.clone()),
+                ));
+            }
+        } else {
+            return Err(TypeError::CaseLeftOverMismatch(
+                e.clone(),
+                x.clone(),
+                s1.clone(),
+                None,
+            ));
+        }
+    }
+    for (x, s2) in &u2.map {
+        if !u1.map.contains_key(x) {
+            return Err(TypeError::CaseLeftOverMismatch(
+                e.clone(),
+                x.clone(),
+                s2.clone(),
+                None,
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
@@ -60,28 +285,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
                 );
                 let (u, po) = check(&ctx2, e_body, t2)?;
                 // Assert that channel arguments are used up.
-                match &t1.val {
-                    Type::Chan(s) => {
-                        if let Some(s2) = u.map.get(&x.val) {
-                            if !s.is_equal_to(s2) {
-                                return Err(TypeError::LeftOverVar(
-                                    e.clone(),
-                                    x.clone(),
-                                    s.clone(),
-                                    Some(s2.clone()),
-                                ));
-                            }
-                        } else {
-                            return Err(TypeError::LeftOverVar(
-                                e.clone(),
-                                x.clone(),
-                                s.clone(),
-                                None,
-                            ));
-                        }
-                    }
-                    _ => todo!(),
-                }
+                if_chan_then_used(&e, &t1, &u, &x)?;
                 // Assert that the effects are correct
                 if !Eff::leq(po, p.val) {
                     return Err(TypeError::MismatchEffSub(
@@ -181,16 +385,6 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
     }
 }
 
-pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, SessionB> {
-    let mut sis = HashMap::new();
-    for x in fvs {
-        if let Some(Session::Borrowed(s)) = u.map.get(x) {
-            sis.insert(x.clone(), s.val.clone());
-        }
-    }
-    sis
-}
-
 pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
@@ -230,25 +424,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c2 = ctx.restrict(&fvs2).split_off(&u1);
             let (u2, p2) = check(&c2, e2, &t11)?;
 
-            let u = u1.join(&u2);
-
-            let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
-            let sis = split_infos(&fvs, &u1);
-            let r1 = Ren::fresh_from(sis.keys(), "1");
-            let r2 = Ren::fresh_from(sis.keys(), "2");
-            let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
-            let c12 = CtxS::Join(
-                c1.replace(&u1).rename(&r1),
-                c2.replace(&u2).rename(&r2),
-                m.to_join_ord(),
-            );
-            if !ctx_split.is_subctx_of(&c12) {
-                Err(TypeError::CtxSplitFailed(
-                    e.clone(),
-                    ctx_split.clone(),
-                    c12.clone(),
-                ))?
-            }
+            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, m.to_join_ord())?;
 
             if m.val == Mult::OrdL && p2 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -293,25 +469,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 ));
             }
 
-            let u = u1.join(&u2);
-
-            let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
-            let sis = split_infos(&fvs, &u1);
-            let r1 = Ren::fresh_from(sis.keys(), "1");
-            let r2 = Ren::fresh_from(sis.keys(), "2");
-            let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
-            let c12 = CtxS::Join(
-                c1.replace(&u1).rename(&r1),
-                c2.replace(&u2).rename(&r2),
-                m.to_join_ord(),
-            );
-            if !ctx_split.is_subctx_of(&c12) {
-                Err(TypeError::CtxSplitFailed(
-                    e.clone(),
-                    ctx_split.clone(),
-                    c12.clone(),
-                ))?
-            }
+            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, m.to_join_ord())?;
 
             if p1 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -323,7 +481,6 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((*t12.clone(), u1.join(&u2), Eff::lub(**p, Eff::lub(p1, p2))))
         }
-        Expr::Let(spanned, spanned1, spanned2) => todo!(),
         Expr::Pair(e1, e2) => {
             let fvs1 = e1.free_vars();
             let c1 = ctx.restrict(&fvs1);
@@ -384,8 +541,153 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t_pair, u1.join(&u2), Eff::lub(p1, p2)))
         }
-        Expr::LetPair(spanned, spanned1, spanned2, spanned3) => todo!(),
-        Expr::CaseSum(spanned, vec) => todo!(),
+        Expr::Let(x, e1, e2) => {
+            let fvs1 = e1.free_vars();
+
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+
+            if cc.vars().contains(&x.val) {
+                Err(TypeError::Shadowing(e.clone(), x.clone()))?
+            }
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let c2 = cc.fill(Ctx::Bind(x.clone(), t1.clone()));
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            // Assert that channel arguments are used up.
+            if_chan_then_used(&e, &t1, &u2, &x)?;
+
+            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
+        }
+        Expr::LetPair(x, y, e1, e2) => {
+            let fvs1 = e1.free_vars();
+            let fvs2 = e2.free_vars();
+
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let Type::Prod(m, t11, t12) = &t1.val else {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Err("Product".into()),
+                    t1.clone(),
+                ));
+            };
+
+            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+
+            if cc.vars().contains(&x.val) {
+                Err(TypeError::Shadowing(e.clone(), x.clone()))?
+            }
+            if cc.vars().contains(&y.val) || x.val == y.val {
+                Err(TypeError::Shadowing(e.clone(), y.clone()))?
+            }
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let c2 = cc.fill(Ctx::Join(
+                Box::new(Ctx::Bind(x.clone(), *t11.clone())),
+                Box::new(Ctx::Bind(y.clone(), *t12.clone())),
+                m.to_join_ord(),
+            ));
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            // Assert that channel arguments are used up.
+            if_chan_then_used(&e, &t1, &u2, &x)?;
+            if_chan_then_used(&e, &t2, &u2, &y)?;
+
+            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
+        }
+        Expr::CaseSum(e1, cs) => {
+            let fvs1 = e1.free_vars();
+
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let Type::Variant(tcs) = &t1.val else {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Err("Variant".into()),
+                    t1.clone(),
+                ));
+            };
+
+            let tls = tcs.iter().map(|(l, _)| &l.val).collect::<Vec<_>>();
+            let ls = cs.iter().map(|(l, _x, _e)| &l.val).collect::<Vec<_>>();
+            check_variant_label_eq(e, &t1, &ls, &tls)?;
+
+            let e2s = cs.iter().map(|(_l, _x, e)| e).collect::<Vec<_>>();
+            let cc = compute_ctx_ctx(e, &u1, e1, &e2s, ctx)?;
+
+            let xs = cs.iter().map(|(_l, x, _e)| x).collect::<Vec<_>>();
+            for x in xs {
+                if cc.vars().contains(&x.val) {
+                    Err(TypeError::Shadowing(e.clone(), x.clone()))?
+                }
+            }
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let mut cs_zip = Vec::new();
+            for (l, x, e) in cs {
+                let (_, t) = tcs.iter().find(|(l2, _)| l.val == l2.val).unwrap();
+                cs_zip.push((l, x, e, t));
+            }
+
+            let mut out: Option<(SType, Rep, Eff)> = None;
+            for (_, x_, e_, t_) in &cs_zip {
+                let c_ = cc.fill(Ctx::Bind((*x_).clone(), (*t_).clone()));
+                let (t2_, u2_, p2_) = infer(&c_, e_)?;
+
+                // Assert that channel arguments are used up.
+                if_chan_then_used(&e_, &t2_, &u2_, &x_)?;
+
+                if let Some((t2, u2, p2)) = &mut out {
+                    if !t2.is_equal_to(&t2_) {
+                        return Err(TypeError::CaseClauseTypeMismatch(
+                            e.clone(),
+                            t2.clone(),
+                            t2_.clone(),
+                        ));
+                    }
+                    *p2 = Eff::lub(*p2, p2_);
+                    check_rep_eq(&e, &u2, &u2_.remove(x_))?;
+                } else {
+                    out = Some((t2_, u2_.remove(x_), p2_))
+                }
+            }
+            let (t2, u2, p2) = out.unwrap();
+
+            check_split_alg_gen(e, &u1, &u2, e1, &e2s, ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
+        }
         Expr::Fork(spanned) => todo!(),
         Expr::New(spanned) => todo!(),
         Expr::Send(spanned, spanned1) => todo!(),

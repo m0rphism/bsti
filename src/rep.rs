@@ -37,4 +37,21 @@ impl Rep {
         u.remove_mut(x);
         u
     }
+    pub fn is_equal_to(&self, u: &Self) -> bool {
+        for (x, s1) in &self.map {
+            if let Some(s2) = u.map.get(x) {
+                if !s1.is_equal_to(s2) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        for x in u.map.keys() {
+            if !self.map.contains_key(x) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

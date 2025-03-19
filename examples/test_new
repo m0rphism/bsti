@@ -1,4 +1,13 @@
-(unit, unit)
+case (inj foo unit : <foo: Unit, bar: Unit>) {
+  foo x → { x }
+  bar x → { x } 
+}
+
+# let x, y = (unit, unit) in x
+
+# let x = unit in x
+
+# (unit, unit)
 
 # inj foo unit : <foo: Unit, bar: Unit>
 

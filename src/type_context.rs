@@ -381,6 +381,24 @@ pub mod CtxCtxS {
 }
 
 impl CtxCtx {
+    pub fn flatmap_binds_mut(&mut self, f: &mut impl FnMut(Id, Type) -> Ctx) {
+        match self {
+            CtxCtx::Hole => (),
+            CtxCtx::JoinL(cc1, c2, _o) => {
+                cc1.flatmap_binds_mut(f);
+                c2.flatmap_binds_mut(f);
+            }
+            CtxCtx::JoinR(c1, cc2, _o) => {
+                c1.flatmap_binds_mut(f);
+                cc2.flatmap_binds_mut(f);
+            }
+        }
+    }
+    pub fn flatmap_binds(&self, f: &mut impl FnMut(Id, Type) -> Ctx) -> Self {
+        let mut cc = self.clone();
+        cc.flatmap_binds_mut(f);
+        cc
+    }
     pub fn fill(&self, c: Ctx) -> Ctx {
         match self {
             CtxCtx::Hole => c,
@@ -498,6 +516,32 @@ impl CtxCtx {
                 (c1, c2) => CtxCtxS::JoinR(c1, c2, *o),
             },
         }
+    }
+
+    // ⋯ʳᶜ operator from Agda
+    pub fn replace(&self, u: &Rep) -> Self {
+        self.flatmap_binds(&mut |x: Id, mut t: Type| {
+            if let Type::Chan(_) = &t {
+                if let Some(s) = u.map.get(&x) {
+                    t = Type::Chan(fake_span(s.clone()));
+                }
+            }
+            Ctx::Bind(fake_span(x), fake_span(t))
+        })
+    }
+
+    // ⋯ᵘᶜ operator from Agda
+    pub fn rename(&self, r: &Ren) -> Self {
+        let mut ctx = self.clone();
+        ctx.flatmap_binds_mut(&mut |x: Id, t: Type| {
+            let y = r.map.get(&x).cloned().unwrap_or(x);
+            Ctx::Bind(fake_span(y), fake_span(t))
+        });
+        ctx
+    }
+
+    pub fn vars(&self) -> HashSet<Id> {
+        self.fill(Ctx::Empty).vars()
     }
 }
 

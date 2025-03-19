@@ -382,6 +382,104 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::CaseMissingLabel(e, t, l) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "No clause covers label '{}' of type '{}'.",
+                            l,
+                            pretty_def(t)
+                        ),
+                    )],
+                );
+            }
+            TypeError::CaseExtraLabel(e, t, l) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!("The label '{}' does not occur in type '{}'. You may want to delete the corresponding clause.", l,  pretty_def(t)),
+                    )],
+                );
+            }
+            TypeError::CaseDuplicateLabel(e, _t, l) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!("Multiple cases for the same label '{}'.", l),
+                    )],
+                );
+            }
+            TypeError::CaseClauseTypeMismatch(e, t1, t2) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "Clause expressions have different types: '{}' is not equal to '{}'.",
+                            pretty_def(&t1),
+                            pretty_def(&t2)
+                        ),
+                    )],
+                );
+            }
+            TypeError::CaseLeftOverMismatch(e, x, s1, s2) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "Clause expressions use variable '{}' of session type in different ways: '{}' is not the same as {}.",
+                            x,
+                            pretty_def(&s1),
+                            if let Some(s2) = s2 {
+                                format!("'{}'", pretty_def(&s2))
+                            } else {
+                                format!("not using 'x' at all.")
+                            }
+                        ),
+                    )],
+                );
+            }
+            TypeError::VariantEmpty(e) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!("Empty variant types are not allowed."),
+                    )],
+                );
+            }
+            TypeError::VariantDuplicateLabel(e, t, l) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "Variant type {} contains the label '{}' more than once.",
+                            pretty_def(t),
+                            l
+                        ),
+                    )],
+                );
+            }
         },
         IErr::Eval(e) => match e {
             //EvalError::ValMismatch(e, v_expected, v_actual) => {
