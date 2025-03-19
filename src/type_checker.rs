@@ -712,7 +712,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         Expr::Send(e1, e2) => {
             let fvs1 = e1.free_vars();
             let c1 = ctx.restrict(&fvs1);
-            let (t1, u1, p1) = infer(&c1, e1)?;
+            let (t1, u1, _p1) = infer(&c1, e1)?;
 
             let t2 = fake_span(Type::Chan(fake_span(Session::Borrowed(fake_span(
                 SessionB::Op(
@@ -724,15 +724,79 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             let fvs2 = e2.free_vars();
             let c2 = ctx.restrict(&fvs2).split_off(&u1);
-            let (u2, p2) = check(&c2, e2, &t2)?;
+            let (u2, _p2) = check(&c2, e2, &t2)?;
 
             check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, JoinOrd::Unordered)?;
 
-            Ok((fake_span(Type::Unit), u1.join(&u2), Eff::lub(p1, p2)))
+            Ok((fake_span(Type::Unit), u1.join(&u2), Eff::Yes))
         }
-        Expr::Recv(spanned) => todo!(),
-        Expr::Drop(spanned) => todo!(),
-        Expr::End(session_op, spanned) => todo!(),
+        Expr::Recv(e1) => {
+            let (t, u, _p) = infer(ctx, e1)?;
+
+            let err = Err(TypeError::Mismatch(
+                *e1.clone(),
+                Err(format!("Chan ?t.return  (for some type t)")),
+                t.clone(),
+            ));
+            let Type::Chan(s) = t.val else {
+                return err;
+            };
+            let Session::Borrowed(s) = s.val else {
+                return err;
+            };
+            let SessionB::Op(SessionOp::Recv, t, s) = s.val else {
+                return err;
+            };
+            let SessionB::Return = s.val else {
+                return err;
+            };
+
+            Ok((*t, u, Eff::Yes))
+        }
+        Expr::Drop(e1) => {
+            let (t, u, _p) = infer(ctx, e1)?;
+
+            let err = Err(TypeError::Mismatch(
+                *e1.clone(),
+                Err(format!("Chan return")),
+                t.clone(),
+            ));
+            let Type::Chan(s) = t.val else {
+                return err;
+            };
+            let Session::Borrowed(s) = s.val else {
+                return err;
+            };
+            let SessionB::Return = s.val else {
+                return err;
+            };
+
+            Ok((fake_span(Type::Unit), u, Eff::Yes))
+        }
+        Expr::End(op, e1) => {
+            let (t, u, _p) = infer(ctx, e1)?;
+
+            let err = Err(TypeError::Mismatch(
+                *e1.clone(),
+                if *op == SessionOp::Send {
+                    Err(format!("Chan term"))
+                } else {
+                    Err(format!("Chan wait"))
+                },
+                t.clone(),
+            ));
+            let Type::Chan(s) = t.val else {
+                return err;
+            };
+            let Session::Owned(s) = s.val else {
+                return err;
+            };
+            if s.val != SessionO::End(*op) {
+                return err;
+            }
+
+            Ok((fake_span(Type::Unit), u, Eff::Yes))
+        }
         Expr::Unit => {
             assert_unr_ctx(&e, &ctx)?;
             Ok((fake_span(Type::Unit), Rep::empty(), Eff::No))
@@ -748,321 +812,6 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         Expr::Borrow(x) => Err(TypeError::TypeAnnotationMissing(e.clone())),
         Expr::Inj(l, e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
     }
-    //let e_copy = e.clone();
-    //match &mut e.val {
-    //    Expr::Unit => {
-    //        assert_unr_ctx(&e_copy, &ctx)?;
-    //        Ok((fake_span(Type::Unit), Eff::No))
-    //    }
-    //    Expr::New(r) if r.is_empty() => Err(TypeError::NewEmpty(r.clone()))?,
-    //    Expr::New(r) => {
-    //        assert_unr_ctx(&e_copy, &ctx)?;
-    //        Ok((fake_span(Type::Regex(r.clone())), Eff::No))
-    //    }
-    //    Expr::Write(w, e2) => {
-    //        let (t, _p) = infer(ctx, e2)?;
-    //        match &t.val {
-    //            Type::Regex(r) => {
-    //                let r2 = r.deriv_re_norm(&w.val);
-    //                if r2.is_empty() {
-    //                    Err(TypeError::InvalidWrite(e_copy, r.clone(), w.clone()))
-    //                } else {
-    //                    Ok((fake_span(Type::Regex(fake_span(r2))), Eff::Yes))
-    //                }
-    //            }
-    //            _ => Err(TypeError::Mismatch(
-    //                e.clone(),
-    //                Err(format!("resource type")),
-    //                t.clone(),
-    //            )),
-    //        }
-    //    }
-    //    Expr::Split(r1, e2) => {
-    //        let (t, p) = infer(ctx, e2)?;
-    //        match &t.val {
-    //            Type::Regex(r) => {
-    //                let r2 = r.deriv_re_norm(r1);
-    //                if r1.is_empty() {
-    //                    Err(TypeError::InvalidSplitArg(r1.clone()))
-    //                } else if r2.is_empty() {
-    //                    Err(TypeError::InvalidSplitRes(
-    //                        e_copy,
-    //                        r.clone(),
-    //                        r1.clone(),
-    //                        fake_span(r2.clone()),
-    //                    ))
-    //                } else {
-    //                    Ok((
-    //                        fake_span(Type::Prod(
-    //                            fake_span(Mult::OrdL),
-    //                            Box::new(fake_span(Type::Regex(r1.clone()))),
-    //                            Box::new(fake_span(Type::Regex(fake_span(r2)))),
-    //                        )),
-    //                        p,
-    //                    ))
-    //                }
-    //            }
-    //            _ => Err(TypeError::Mismatch(
-    //                e.clone(),
-    //                Err(format!("resource type")),
-    //                t.clone(),
-    //            )),
-    //        }
-    //    }
-    //    Expr::Drop(e2) => {
-    //        let (t, p) = infer(ctx, e2)?;
-    //        match &t.val {
-    //            Type::Regex(r) if r.nullable() => Ok((fake_span(Type::Unit), p)),
-    //            Type::Regex(r) => Err(TypeError::ClosedUnfinished(e2.as_ref().clone(), r.clone())),
-    //            _ => Err(TypeError::Mismatch(
-    //                e.clone(),
-    //                Err(format!("resource type")),
-    //                t.clone(),
-    //            )),
-    //        }
-    //    }
-    //    Expr::Loc(l) => Err(TypeError::LocationExpr(l.clone())),
-    //    Expr::Var(x) => match ctx.lookup_ord_pure(x) {
-    //        Some((ctx, t)) => {
-    //            assert_unr_ctx(e, &ctx)?;
-    //            Ok((t.clone(), Eff::No))
-    //        }
-    //        None => Err(TypeError::UndefinedVariable(x.clone())),
-    //    },
-    //    Expr::Abs(_m, _x, _e) => Err(TypeError::TypeAnnotationMissing(e.clone())),
-    //    Expr::App(om, e1, e2) => {
-    //        let c1 = ctx.restrict(&e1.free_vars());
-    //        let c2 = ctx.restrict(&e2.free_vars());
-    //        let (t1, p1) = infer(&c1, e1)?;
-    //        let (t2, p2) = infer(&c2, e2)?;
-    //        match t1.val {
-    //            Type::Arr(m, p, t11, t12) if t11.val.is_equal_to(&t2.val) => {
-    //                match m.val {
-    //                    Mult::OrdL if p2 == Eff::Yes => Err(TypeError::MismatchEff(
-    //                        *e2.clone(),
-    //                        fake_span(Eff::No),
-    //                        fake_span(p2),
-    //                    ))?,
-    //                    Mult::OrdR if p1 == Eff::Yes => Err(TypeError::MismatchEff(
-    //                        *e1.clone(),
-    //                        fake_span(Eff::No),
-    //                        fake_span(p1),
-    //                    ))?,
-    //                    _ => (),
-    //                }
-    //                let c12 = match m.val {
-    //                    Mult::Unr => CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered),
-    //                    Mult::Lin => CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Unordered),
-    //                    Mult::OrdL => CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered),
-    //                    Mult::OrdR => CtxS::Join(c2.clone(), c1.clone(), JoinOrd::Ordered),
-    //                };
-    //                if !ctx.is_subctx_of(&c12) {
-    //                    Err(TypeError::CtxSplitFailed(e_copy, ctx.clone(), c12.clone()))?
-    //                }
-    //                *om = Some(m.val);
-    //                Ok((*t12, Eff::lub(p.val, Eff::lub(p1, p2))))
-    //            }
-    //            Type::Arr(_m, _p, t11, _t12) => Err(TypeError::Mismatch(
-    //                *e2.clone(),
-    //                Ok(*t11.clone()),
-    //                t2.clone(),
-    //            ))?,
-    //            _ => Err(TypeError::Mismatch(
-    //                *e1.clone(),
-    //                Err("Function".into()),
-    //                t1.clone(),
-    //            )),
-    //        }
-    //    }
-    //    Expr::AppBorrow(_e1, _x) => {
-    //        panic!("Borrows are not supported, yet")
-    //        ////////////////////////////////////////////////////////////////////////////////
-    //        // Translating borrow notation is nonlocal:
-    //        //   The code
-    //
-    //        //     let x = new {ab} in (f &x; close (!b) x)
-    //
-    //        //   needs to be translated to
-    //
-    //        //     let x = new {ab} in let (y , x) = split a x in (f y; close (!b) x)
-    //
-    //        //   instead of
-    //
-    //        //     let x = new {ab} in (let (y , x) = split a x in f y); close (!b) x
-    //
-    //        //   We cannot do it as a preprocessing because, we need type checker information.
-    //        //   We cannot do it directly in the typechecker without changing the shape of the relation.
-    //        ////////////////////////////////////////////////////////////////////////////////
-    //
-    //        // let c1 = {
-    //        //     let mut xs = ctx.vars();
-    //        //     xs.remove(&x.val);
-    //        //     ctx.restrict(&xs)
-    //        // };
-    //        // // let c2 = ctx.restrict(&HashSet::from([x.val.clone()]));
-    //
-    //        // let (t, _) = infer(&c1, &e1)?;
-    //        // let r = match &t.val {
-    //        //     Type::Arr(_m, _p, t1, _t2) => match &t1.val {
-    //        //         Type::Regex(r) => r.clone(),
-    //        //         t => Err(TypeError::Mismatch(
-    //        //             *e1.clone(),
-    //        //             Err(format!("function type with resource domain")),
-    //        //             fake_span(t.clone()),
-    //        //         ))?,
-    //        //     },
-    //        //     t => Err(TypeError::Mismatch(
-    //        //         *e1.clone(),
-    //        //         Err(format!("function type")),
-    //        //         fake_span(t.clone()),
-    //        //     ))?,
-    //        // };
-    //
-    //        // let y = fresh_var();
-    //        // let e_new = fake_span(Expr::LetPair(
-    //        //     y.clone(),
-    //        //     x.clone(),
-    //        //     Box::new(fake_span(Expr::Split(
-    //        //         r,
-    //        //         Box::new(fake_span(Expr::Var(x.clone()))),
-    //        //     ))),
-    //        //     Box::new(fake_span(Expr::App(
-    //        //         e1.clone(),
-    //        //         Box::new(fake_span(Expr::Var(y))),
-    //        //     ))),
-    //        // ));
-    //        // eprintln!("BORROW BORROW BORROW");
-    //        // eprintln!("Expression In: {}", pretty_def(&e));
-    //        // eprintln!("Expression Out: {}", pretty_def(&e_new));
-    //        // eprintln!("Context: {}", pretty_def(&ctx.simplify()));
-    //        // infer(ctx, &e_new)
-    //    }
-    //    Expr::Pair(om, e1, e2) => {
-    //        let c1 = ctx.restrict(&e1.free_vars());
-    //        let c2 = ctx.restrict(&e2.free_vars());
-    //        let (t1, p1) = infer(&c1, e1)?;
-    //        let (t2, p2) = infer(&c2, e2)?;
-    //
-    //        let m = {
-    //            let c12_lin = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Unordered);
-    //            if ctx.is_subctx_of(&c12_lin) {
-    //                Mult::Lin
-    //            } else {
-    //                let c12_ordl = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered);
-    //                if ctx.is_subctx_of(&c12_ordl) {
-    //                    Mult::OrdL
-    //                } else {
-    //                    Err(TypeError::CtxSplitFailed(
-    //                        e_copy.clone(),
-    //                        ctx.clone(),
-    //                        c12_ordl.clone(),
-    //                    ))?
-    //                }
-    //            }
-    //        };
-    //
-    //        match m {
-    //            Mult::OrdL if t1.is_ord() && p2 == Eff::Yes => Err(TypeError::MismatchEff(
-    //                *e2.clone(),
-    //                fake_span(Eff::No),
-    //                fake_span(p2),
-    //            ))?,
-    //            Mult::OrdR if t2.is_ord() && p1 == Eff::Yes => Err(TypeError::MismatchEff(
-    //                *e1.clone(),
-    //                fake_span(Eff::No),
-    //                fake_span(p1),
-    //            ))?,
-    //            _ => (),
-    //        }
-    //
-    //        let t_pair = fake_span(Type::Prod(fake_span(m), Box::new(t1), Box::new(t2)));
-    //
-    //        if let Some(m2) = om {
-    //            if m != m2.val {
-    //                Err(TypeError::MismatchMult(
-    //                    e_copy,
-    //                    t_pair.clone(),
-    //                    fake_span(m),
-    //                    m2.clone(),
-    //                ))?
-    //            }
-    //        }
-    //
-    //        Ok((t_pair, Eff::lub(p1, p2)))
-    //    }
-    //    Expr::LetPair(x, y, e1, e2) => {
-    //        let (cc, c) = match ctx.split(&e1.free_vars()) {
-    //            Some((cc, c)) => (cc, c),
-    //            None => Err(TypeError::CtxCtxSplitFailed(
-    //                e_copy.clone(),
-    //                ctx.clone(),
-    //                e1.free_vars(),
-    //            ))?,
-    //        };
-    //        let (t1, p1) = infer(&c, e1)?;
-    //        if p1 == Eff::Yes {
-    //            Err(TypeError::MismatchEff(
-    //                *e1.clone(),
-    //                fake_span(Eff::No),
-    //                fake_span(p1),
-    //            ))?
-    //        }
-    //        let (m, t11, t12) = match t1.val {
-    //            Type::Prod(m, t11, t12) => (m, *t11, *t12),
-    //            _ => Err(TypeError::Mismatch(
-    //                e_copy.clone(),
-    //                Err(format!("product type")),
-    //                t1,
-    //            ))?,
-    //        };
-    //        let c_fill = ext(
-    //            m.val,
-    //            CtxS::Bind(x.clone(), t11),
-    //            CtxS::Bind(y.clone(), t12),
-    //        );
-    //
-    //        let ctx_vars = cc.fill(Ctx::Empty).vars();
-    //        if ctx_vars.contains(&x.val) {
-    //            Err(TypeError::Shadowing(e_copy.clone(), x.clone()))?
-    //        }
-    //        if ctx_vars.contains(&y.val) || x.val == y.val {
-    //            Err(TypeError::Shadowing(e_copy.clone(), y.clone()))?
-    //        }
-    //
-    //        let ctx2 = &cc.fill(c_fill);
-    //        infer(ctx2, e2)
-    //    }
-    //    Expr::Let(x, e1, e2) => {
-    //        let c1 = ctx.restrict(&e1.free_vars());
-    //        let c2 = ctx.restrict(&e2.free_vars());
-    //
-    //        if c2.vars().contains(&x.val) {
-    //            Err(TypeError::Shadowing(e_copy.clone(), x.clone()))?
-    //        }
-    //
-    //        let join_ord = {
-    //            let c12 = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Unordered);
-    //            if ctx.is_subctx_of(&c12) {
-    //                JoinOrd::Unordered
-    //            } else {
-    //                let c12 = CtxS::Join(c1.clone(), c2.clone(), JoinOrd::Ordered);
-    //                if ctx.is_subctx_of(&c12) {
-    //                    JoinOrd::Ordered
-    //                } else {
-    //                    Err(TypeError::CtxSplitFailed(
-    //                        e_copy.clone(),
-    //                        ctx.clone(),
-    //                        c12.clone(),
-    //                    ))?
-    //                }
-    //            }
-    //        };
-    //
-    //        let (t1, p1) = infer(&c1, e1)?;
-    //        let c2x = CtxS::Join(CtxS::Bind(x.clone(), t1), &c2, join_ord);
-    //        let (t2, p2) = infer(&c2x, e2)?;
-    //        Ok((t2, Eff::lub(p1, p2)))
-    //    }
     //    Expr::Seq(e1, e2) => {
     //        let c1 = ctx.restrict(&e1.free_vars());
     //        let c2 = ctx.restrict(&e2.free_vars());
