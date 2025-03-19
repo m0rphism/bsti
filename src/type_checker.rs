@@ -16,7 +16,7 @@ pub enum TypeError {
     LocationExpr(SLoc),
     UndefinedVariable(SId),
     Mismatch(SExpr, Result<SType, String>, SType),
-    MismatchMult(SExpr, SType, SMult, SMult),
+    MismatchMult(SExpr, SType, Result<SMult, String>, SMult),
     MismatchEff(SExpr, SEff, SEff),
     MismatchEffSub(SExpr, SEff, SEff),
     MismatchLabel(SExpr, SumLabel, SType),
@@ -204,8 +204,125 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             }
             None => Err(TypeError::UndefinedVariable(x.clone())),
         },
-        Expr::App(spanned, spanned1) => todo!(),
-        Expr::AppR(spanned, spanned1) => todo!(),
+        Expr::App(e1, e2) => {
+            let fvs1 = e1.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let Type::Arr(m, p, t11, t12) = &t1.val else {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Err("Function".into()),
+                    t1.clone(),
+                ));
+            };
+
+            if m.val == Mult::OrdR {
+                return Err(TypeError::MismatchMult(
+                    *e1.clone(),
+                    t1.clone(),
+                    Err("unr, lin, or left".into()),
+                    m.clone(),
+                ));
+            }
+
+            let fvs2 = e2.free_vars();
+            let c2 = ctx.restrict(&fvs2).split_off(&u1);
+            let (u2, p2) = check(&c2, e2, &t11)?;
+
+            let u = u1.join(&u2);
+
+            let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
+            let sis = split_infos(&fvs, &u1);
+            let r1 = Ren::fresh_from(sis.keys(), "1");
+            let r2 = Ren::fresh_from(sis.keys(), "2");
+            let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
+            let c12 = CtxS::Join(
+                c1.replace(&u1).rename(&r1),
+                c2.replace(&u2).rename(&r2),
+                m.to_join_ord(),
+            );
+            if !ctx_split.is_subctx_of(&c12) {
+                Err(TypeError::CtxSplitFailed(
+                    e.clone(),
+                    ctx_split.clone(),
+                    c12.clone(),
+                ))?
+            }
+
+            if m.val == Mult::OrdL && p2 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e2.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            Ok((*t12.clone(), u1.join(&u2), Eff::lub(**p, Eff::lub(p1, p2))))
+        }
+        Expr::AppR(e1, e2) => {
+            let fvs1 = e1.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let fvs2 = e2.free_vars();
+            let c2 = ctx.restrict(&fvs2).split_off(&u1);
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            let Type::Arr(m, p, t11, t12) = &t2.val else {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Err("Function".into()),
+                    t1.clone(),
+                ));
+            };
+            if !t1.is_equal_to(t11) {
+                return Err(TypeError::Mismatch(
+                    *e1.clone(),
+                    Ok(*t11.clone()),
+                    t1.clone(),
+                ));
+            }
+
+            if m.val != Mult::OrdR {
+                return Err(TypeError::MismatchMult(
+                    *e1.clone(),
+                    t1.clone(),
+                    Ok(fake_span(Mult::OrdR)),
+                    m.clone(),
+                ));
+            }
+
+            let u = u1.join(&u2);
+
+            let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
+            let sis = split_infos(&fvs, &u1);
+            let r1 = Ren::fresh_from(sis.keys(), "1");
+            let r2 = Ren::fresh_from(sis.keys(), "2");
+            let ctx_split = ctx.replace(&u).split_ctx(&sis, &r1, &r2);
+            let c12 = CtxS::Join(
+                c1.replace(&u1).rename(&r1),
+                c2.replace(&u2).rename(&r2),
+                m.to_join_ord(),
+            );
+            if !ctx_split.is_subctx_of(&c12) {
+                Err(TypeError::CtxSplitFailed(
+                    e.clone(),
+                    ctx_split.clone(),
+                    c12.clone(),
+                ))?
+            }
+
+            if p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            Ok((*t12.clone(), u1.join(&u2), Eff::lub(**p, Eff::lub(p1, p2))))
+        }
         Expr::Let(spanned, spanned1, spanned2) => todo!(),
         Expr::Pair(e1, e2) => {
             let fvs1 = e1.free_vars();
@@ -242,7 +359,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     } else {
                         Err(TypeError::CtxSplitFailed(
                             e.clone(),
-                            ctx.clone(),
+                            ctx_split.clone(),
                             c12_ordl.clone(),
                         ))?
                     }

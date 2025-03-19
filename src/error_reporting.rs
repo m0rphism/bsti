@@ -118,6 +118,10 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 );
             }
             TypeError::MismatchMult(e, t, m_expected, m_actual) => {
+                let expected = match m_expected {
+                    Ok(m) => pretty_def(&m.val),
+                    Err(s) => s,
+                };
                 report(
                     &src,
                     e.span.start,
@@ -128,7 +132,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                             "This expression has type {} with multiplicity {}, but should have multiplicity {}.",
                                 pretty_def(&t.val),
                                 pretty_def(&m_actual.val),
-                                pretty_def(&m_expected.val),
+                                expected,
                         ),
                     )],
                 );
