@@ -4,8 +4,8 @@ use crate::{
     ren::Ren,
     rep::Rep,
     syntax::{
-        Eff, Expr, Id, Mult, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession, SSessionB,
-        SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
+        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession,
+        SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::span::fake_span,
@@ -20,6 +20,7 @@ pub enum TypeError {
     MismatchEff(SExpr, SEff, SEff),
     MismatchEffSub(SExpr, SEff, SEff),
     MismatchLabel(SExpr, SumLabel, SType),
+    Op2Mismatch(SExpr, Result<SType, String>, SType, SType),
     TypeAnnotationMissing(SExpr),
     //ClosedUnfinished(SExpr, SRegex),
     //InvalidWrite(SExpr, SRegex, SRegex),
@@ -825,9 +826,9 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((fake_span(Type::Unit), u, Eff::Yes))
         }
-        Expr::Unit => {
+        Expr::Const(c) => {
             assert_unr_ctx(&e, &ctx)?;
-            Ok((fake_span(Type::Unit), Rep::empty(), Eff::No))
+            Ok((fake_span(c.type_()), Rep::empty(), Eff::No))
         }
         Expr::Ann(e, t) => {
             let (u, eff) = check(ctx, e, t)?;
@@ -837,6 +838,87 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         Expr::Abs(_x, _e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
         Expr::Borrow(_x) => Err(TypeError::TypeAnnotationMissing(e.clone())),
         Expr::Inj(_l, _e1) => Err(TypeError::TypeAnnotationMissing(e.clone())),
+        Expr::Op1(op1, e1) => {
+            let (t1, u1, p1) = infer(ctx, e1)?;
+            let t = match (op1, &t1.val) {
+                (Op1::Neg, Type::Int) => Type::Int,
+                (Op1::Neg, _) => {
+                    return Err(TypeError::Mismatch(
+                        e.clone(),
+                        Err(format!("Int")),
+                        t1.clone(),
+                    ))
+                }
+                (Op1::Not, Type::Bool) => Type::Bool,
+                (Op1::Not, _) => {
+                    return Err(TypeError::Mismatch(
+                        e.clone(),
+                        Err(format!("Bool")),
+                        t1.clone(),
+                    ))
+                }
+                (Op1::ToStr, _) => Type::String,
+                (Op1::Print, _) => Type::Unit,
+            };
+            Ok((fake_span(t), u1, p1))
+        }
+        Expr::Op2(op2, e1, e2) => {
+            let fvs1 = e1.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let (t1, u1, p1) = infer(&c1, e1)?;
+
+            let fvs2 = e2.free_vars();
+            let c2 = ctx.restrict(&fvs2).split_off(&u1);
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            let t = match (op2, &t1.val, &t2.val) {
+                (Op2::Add, Type::Int, Type::Int) => Type::Int,
+                (Op2::Add, Type::String, Type::String) => Type::String,
+                (Op2::Add, _, _) => {
+                    return Err(TypeError::Op2Mismatch(
+                        e.clone(),
+                        Err(format!("String or Int")),
+                        t1.clone(),
+                        t2.clone(),
+                    ))
+                }
+                (Op2::Sub | Op2::Mul | Op2::Div, Type::Int, Type::Int) => Type::Int,
+                (Op2::Sub | Op2::Mul | Op2::Div, _, _) => {
+                    return Err(TypeError::Op2Mismatch(
+                        e.clone(),
+                        Err(format!("Int")),
+                        t1.clone(),
+                        t2.clone(),
+                    ))
+                }
+                (
+                    Op2::Eq | Op2::Neq | Op2::Lt | Op2::Le | Op2::Gt | Op2::Ge,
+                    t1 @ (Type::Int | Type::Bool | Type::String | Type::Unit),
+                    t2,
+                ) if t1 == t2 => Type::Bool,
+                (Op2::Eq | Op2::Neq | Op2::Lt | Op2::Le | Op2::Gt | Op2::Ge, _, _) => {
+                    return Err(TypeError::Op2Mismatch(
+                        e.clone(),
+                        Err(format!("Int or Bool or String or Unit")),
+                        t1.clone(),
+                        t2.clone(),
+                    ))
+                }
+                (Op2::And | Op2::Or, Type::Bool, Type::Bool) => Type::Bool,
+                (Op2::And | Op2::Or, _, _) => {
+                    return Err(TypeError::Op2Mismatch(
+                        e.clone(),
+                        Err(format!("Bool")),
+                        t1.clone(),
+                        t2.clone(),
+                    ))
+                }
+            };
+
+            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, JoinOrd::Ordered)?;
+
+            Ok((fake_span(t), u1.join(&u2), Eff::lub(p1, p2)))
+        }
     }
     //    Expr::LetDecl(x, t, cs, e) => {
     //        let c = if cs.len() == 1 {

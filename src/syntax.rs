@@ -56,11 +56,14 @@ pub type SSession = Spanned<Session>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
-    Unit,
     Chan(SSession),
     Arr(SMult, SEff, Box<SType>, Box<SType>),
     Prod(SMult, Box<SType>, Box<SType>),
     Variant(Vec<(SSumLabel, SType)>),
+    Unit,
+    Int,
+    Bool,
+    String,
 }
 pub type SType = Spanned<Type>;
 
@@ -84,6 +87,49 @@ pub struct Clause {
 pub type SClause = Spanned<Clause>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Const {
+    Unit,
+    Int(i64),
+    Bool(bool),
+    String(String),
+}
+
+impl Const {
+    pub fn type_(&self) -> Type {
+        match self {
+            Const::Unit => Type::Unit,
+            Const::Int(_) => Type::Int,
+            Const::Bool(_) => Type::Bool,
+            Const::String(_) => Type::String,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Op1 {
+    Neg,
+    Not,
+    ToStr,
+    Print,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Op2 {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Neq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Var(SId),
     Abs(SId, Box<SExpr>),
@@ -105,12 +151,14 @@ pub enum Expr {
     Recv(Box<SExpr>),
     Drop(Box<SExpr>),
     End(SessionOp, Box<SExpr>),
-    Unit,
+    Const(Const),
 
     Ann(Box<SExpr>, SType),
 
     LetDecl(SId, SType, Vec<SClause>, Box<SExpr>),
     Seq(Box<SExpr>, Box<SExpr>),
+    Op1(Op1, Box<SExpr>),
+    Op2(Op2, Box<SExpr>, Box<SExpr>),
     // Int(i64),
     // Float(f64),
     // String(String),
@@ -242,7 +290,7 @@ impl Session {
 impl Expr {
     pub fn free_vars(&self) -> HashSet<Id> {
         match self {
-            Expr::Unit => HashSet::new(),
+            Expr::Const(_) => HashSet::new(),
             Expr::New(_r) => HashSet::new(),
             Expr::Drop(e) => e.free_vars(),
             Expr::Var(x) => HashSet::from([x.val.clone()]),
@@ -276,6 +324,8 @@ impl Expr {
             Expr::Send(e1, e2) => union(e1.free_vars(), e2.free_vars()),
             Expr::Recv(e) => e.free_vars(),
             Expr::End(_l, e) => e.free_vars(),
+            Expr::Op1(_op1, e) => e.free_vars(),
+            Expr::Op2(_op2, e1, e2) => union(e1.free_vars(), e2.free_vars()),
         }
     }
 }
@@ -377,7 +427,6 @@ impl Type {
     }
     pub fn is_equal_to(&self, other: &Type) -> bool {
         match (self, other) {
-            (Type::Unit, Type::Unit) => true,
             (Type::Chan(s1), Type::Chan(s2)) => s1.is_equal_to(s2),
             (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
                 m1.val == m2.val && p1.val == p2.val && t11.is_equal_to(t21) && t12.is_equal_to(t22)
@@ -385,17 +434,24 @@ impl Type {
             (Type::Prod(m1, t11, t12), Type::Prod(m2, t21, t22)) => {
                 m1.val == m2.val && t11.is_equal_to(t21) && t12.is_equal_to(t22)
             }
+            (Type::Unit, Type::Unit) => true,
+            (Type::Int, Type::Int) => true,
+            (Type::Bool, Type::Bool) => true,
+            (Type::String, Type::String) => true,
             (_, _) => false,
         }
     }
 
     pub fn is_unr(&self) -> bool {
         match self {
-            Type::Unit => true,
             Type::Chan(_) => false,
             Type::Arr(m, _, _, _) => m.val == Mult::Unr,
             Type::Prod(m, _, _) => m.val == Mult::Unr,
             Type::Variant(cs) => cs.iter().all(|(_, t)| t.is_unr()),
+            Type::Unit => true,
+            Type::Int => true,
+            Type::Bool => true,
+            Type::String => true,
         }
     }
 

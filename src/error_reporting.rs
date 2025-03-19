@@ -117,6 +117,26 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::Op2Mismatch(e, t_expected, t_actual1, t_actual2) => {
+                let expected = match t_expected {
+                    Ok(t) => pretty_def(&t.val),
+                    Err(t) => t,
+                };
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "The operands have types '{}' and '{}' but both should have type '{}'",
+                            pretty_def(&t_actual1.val),
+                            pretty_def(&t_actual2.val),
+                            expected,
+                        ),
+                    )],
+                );
+            }
             TypeError::MismatchMult(e, t, m_expected, m_actual) => {
                 let expected = match m_expected {
                     Ok(m) => pretty_def(&m.val),

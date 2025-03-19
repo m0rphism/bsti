@@ -158,10 +158,20 @@ pub enum Token<'a> {
     Period,
     #[regex(r"\\|λ")]
     Lambda,
+    #[token("||")]
+    DoublePipe,
     #[token("|")]
     Pipe,
+    #[regex(r"&&")]
+    DoubleAmp,
     #[token("&")]
     Amp,
+    #[token("\"")]
+    DoubleQuotes,
+    #[token("str")]
+    ToStr,
+    #[token("print")]
+    Print,
 
     // Positive Int
     #[regex(r"[0-9]+", |lex| lex.slice().parse().map_err(|_| LexingError::Int))]
@@ -275,6 +285,11 @@ impl<'a> Token<'a> {
             Token::Fork => "fork",
             Token::DoubleArrow => "=>",
             Token::QuestionMark => "?",
+            Token::DoubleQuotes => "\"",
+            Token::DoublePipe => "||",
+            Token::DoubleAmp => "&&",
+            Token::ToStr => "str",
+            Token::Print => "print",
         }
     }
 }

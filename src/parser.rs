@@ -42,6 +42,17 @@ peg::parser! {
 
         pub rule tok(t: Token<'a>) -> () = quiet!{[Tok(t2) if t == t2] { () }} / expected!(t.to_str())
 
+        // Constants
+        pub rule string() -> Const = quiet!{[Tok(Str(x))] { Const::String(x.to_owned()) }} / expected!("string literal")
+        pub rule int() -> Const = quiet!{[Tok(Int(x))] { Const::Int(x) }} / expected!("integer literal")
+        pub rule unit() -> Const = tok(Unit) { Const::Unit }
+        pub rule bool() -> Const
+            = quiet!{tok(True) { Const::Bool(true) }}
+            / quiet!{tok(False) { Const::Bool(false) }}
+            / expected!("boolean literal")
+        pub rule constant() -> Const 
+            = quiet!{ string() / int() / bool() / unit() } / expected!("literal")
+
         // Multiplicities
 
         pub rule mult() -> Mult
@@ -145,9 +156,63 @@ peg::parser! {
 
         #[cache_left_rec]
         pub rule expr_seq() -> Expr
-            = e1:sexpr_app() tok(Semicolon) e2:sexpr_seq() { Expr::Seq(Box::new(e1), Box::new(e2)) }
-            / e:expr_app() { e }
+            = e1:sexpr_or() tok(Semicolon) e2:sexpr_seq() { Expr::Seq(Box::new(e1), Box::new(e2)) }
+            / e:expr_or() { e }
         pub rule sexpr_seq() -> SExpr = spanned(<expr_seq()>)
+
+        #[cache_left_rec]
+        pub rule expr_or() -> Expr
+            = e1:sexpr_and() (tok(DoublePipe) / tok(Or)) e2:sexpr_or() { Expr::Op2(Op2::Or, Box::new(e1), Box::new(e2)) }
+            / e:expr_and() { e }
+        pub rule sexpr_or() -> SExpr = spanned(<expr_or()>)
+
+        #[cache_left_rec]
+        pub rule expr_and() -> Expr
+            = e1:sexpr_not() (tok(DoubleAmp) / tok(And)) e2:sexpr_and() { Expr::Op2(Op2::And, Box::new(e1), Box::new(e2)) }
+            / e:expr_not() { e }
+        pub rule sexpr_and() -> SExpr = spanned(<expr_and()>)
+
+        #[cache_left_rec]
+        pub rule expr_not() -> Expr
+            = (tok(Not) / tok(Bang)) e:sexpr_not() { Expr::Op1(Op1::Not, Box::new(e)) }
+            / e:expr_cmp() { e }
+        pub rule sexpr_not() -> SExpr = spanned(<expr_not()>)
+
+        #[cache_left_rec]
+        pub rule expr_cmp() -> Expr
+            = e1:sexpr_add() tok(Lt) e2:sexpr_add() { Expr::Op2(Op2::Lt, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_add() tok(Le) e2:sexpr_add() { Expr::Op2(Op2::Le, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_add() tok(Gt) e2:sexpr_add() { Expr::Op2(Op2::Gt, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_add() tok(Ge) e2:sexpr_add() { Expr::Op2(Op2::Ge, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_add() tok(DoubleEquals) e2:sexpr_add() { Expr::Op2(Op2::Eq, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_add() tok(BangEquals) e2:sexpr_add() { Expr::Op2(Op2::Neq, Box::new(e1), Box::new(e2)) }
+            / e:expr_add() { e }
+        pub rule sexpr_cmp() -> SExpr = spanned(<expr_cmp()>)
+
+        #[cache_left_rec]
+        pub rule expr_add() -> Expr
+            = e1:sexpr_sub() tok(Plus) e2:sexpr_add() { Expr::Op2(Op2::Add, Box::new(e1), Box::new(e2)) }
+            / e:expr_sub() { e }
+        pub rule sexpr_add() -> SExpr = spanned(<expr_add()>)
+
+        #[cache_left_rec]
+        pub rule expr_sub() -> Expr
+            = e1:sexpr_sub() tok(Minus) e2:sexpr_mul() { Expr::Op2(Op2::Sub, Box::new(e1), Box::new(e2)) }
+            / e:expr_mul() { e }
+        pub rule sexpr_sub() -> SExpr = spanned(<expr_sub()>)
+
+        #[cache_left_rec]
+        pub rule expr_mul() -> Expr
+            = e1:sexpr_neg() tok(Star) e2:sexpr_mul() { Expr::Op2(Op2::Mul, Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_neg() tok(Slash) e2:sexpr_mul() { Expr::Op2(Op2::Div, Box::new(e1), Box::new(e2)) }
+            / e:expr_neg() { e }
+        pub rule sexpr_mul() -> SExpr = spanned(<expr_mul()>)
+
+        #[cache_left_rec]
+        pub rule expr_neg() -> Expr
+            = tok(Minus) e:sexpr_neg() { Expr::Op1(Op1::Neg, Box::new(e)) }
+            / e:expr_app() { e }
+        pub rule sexpr_neg() -> SExpr = spanned(<expr_neg()>)
 
         #[cache_left_rec]
         pub rule expr_app() -> Expr
@@ -159,6 +224,8 @@ peg::parser! {
             / tok(Wait) e:sexpr_atom() { Expr::End(SessionOp::Recv, Box::new(e)) }
             / tok(Inj) l:sid() e:sexpr_atom() { Expr::Inj(l, Box::new(e)) }
             / tok(Fork) e:sexpr_atom() { Expr::Fork(Box::new(e)) }
+            / tok(ToStr) e:sexpr_atom() { Expr::Op1(Op1::ToStr, Box::new(e)) }
+            / tok(Print) e:sexpr_atom() { Expr::Op1(Op1::Print, Box::new(e)) }
             / e1:sexpr_app() tok(TriRight) e2:sexpr_atom() { Expr::AppR(Box::new(e1), Box::new(e2)) }
             / e1:sexpr_app() e2:sexpr_atom() { Expr::App(Box::new(e1), Box::new(e2)) }
             / e:expr_atom() { e }
@@ -169,8 +236,8 @@ peg::parser! {
             = tok(ParenL) e:expr() tok(ParenR) { e }
             / tok(ParenL) e1:sexpr() tok(Comma) e2:sexpr() tok(ParenR)
               { Expr::Pair(Box::new(e1), Box::new(e2)) }
-            / tok(Unit) { Expr::Unit }
             / tok(Amp) x:sid() { Expr::Borrow(x) }
+            / c:constant() { Expr::Const(c) }
             / x:sid() { Expr::Var(x.to_owned()) }
         pub rule sexpr_atom() -> SExpr = spanned(<expr_atom()>)
 

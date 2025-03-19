@@ -1,6 +1,7 @@
 use crate::{
     syntax::{
-        Clause, Eff, Expr, Mult, Pattern, SMult, Session, SessionB, SessionO, SessionOp, Type,
+        Clause, Const, Eff, Expr, Mult, Op1, Op2, Pattern, SMult, Session, SessionB, SessionO,
+        SessionOp, Type,
     },
     util::{
         pretty::{Assoc, Pretty, PrettyEnv},
@@ -25,7 +26,6 @@ impl<T: Pretty<UserState>> Pretty<UserState> for Spanned<T> {
 impl Pretty<UserState> for Type {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
-            Type::Unit => p.pp("Unit"),
             Type::Arr(m, e, t1, t2) => p.infix(2, R, |p| {
                 p.pp_arg(L, t1);
                 p.pp(" –[");
@@ -68,6 +68,10 @@ impl Pretty<UserState> for Type {
                 }
                 p.pp(">");
             }
+            Type::Unit => p.pp("Unit"),
+            Type::Int => p.pp("Int"),
+            Type::Bool => p.pp("Bool"),
+            Type::String => p.pp("String"),
         }
     }
 }
@@ -154,7 +158,6 @@ impl Pretty<UserState> for Eff {
 impl Pretty<UserState> for Expr {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
-            Expr::Unit => p.pp("unit"),
             Expr::New(r) => p.infix(3, L, |p| {
                 p.pp("new {");
                 p.pp_prec(0, r);
@@ -172,37 +175,37 @@ impl Pretty<UserState> for Expr {
                 p.pp_arg(R, e);
                 p.pp("");
             }),
-            Expr::App(e1, e2) => p.infix(3, L, |p| {
+            Expr::App(e1, e2) => p.infix(10, L, |p| {
                 p.pp_arg(L, e1);
                 p.pp(" ");
                 p.pp_arg(R, e2);
             }),
-            Expr::AppR(e1, e2) => p.infix(3, L, |p| {
+            Expr::AppR(e1, e2) => p.infix(10, L, |p| {
                 p.pp_arg(L, e1);
                 p.pp(" |> ");
                 p.pp_arg(R, e2);
             }),
-            Expr::Inj(l, e) => p.infix(3, L, |p| {
+            Expr::Inj(l, e) => p.infix(10, L, |p| {
                 p.pp("inj ");
                 p.pp(l);
                 p.pp(" ");
                 p.pp_arg(R, e);
             }),
-            Expr::Fork(e) => p.infix(3, L, |p| {
+            Expr::Fork(e) => p.infix(10, L, |p| {
                 p.pp("fork ");
                 p.pp_arg(R, e);
             }),
-            Expr::Send(e1, e2) => p.infix(3, L, |p| {
+            Expr::Send(e1, e2) => p.infix(10, L, |p| {
                 p.pp("send ");
                 p.pp_arg(R, e1);
                 p.pp(" ");
                 p.pp_arg(R, e2);
             }),
-            Expr::Recv(e) => p.infix(3, L, |p| {
+            Expr::Recv(e) => p.infix(10, L, |p| {
                 p.pp("recv ");
                 p.pp_arg(R, e);
             }),
-            Expr::End(op, e) => p.infix(3, L, |p| {
+            Expr::End(op, e) => p.infix(10, L, |p| {
                 match op {
                     SessionOp::Send => p.pp("term"),
                     SessionOp::Recv => p.pp("wait"),
@@ -273,6 +276,46 @@ impl Pretty<UserState> for Expr {
             Expr::Borrow(x) => {
                 p.pp("&");
                 p.pp(x);
+            }
+            Expr::Const(Const::Unit) => p.pp("unit"),
+            Expr::Const(Const::Int(v)) => p.pp(&v.to_string()),
+            Expr::Const(Const::Bool(v)) => p.pp(&v.to_string()),
+            Expr::Const(Const::String(v)) => p.pp(&format!("\"{v}\"")),
+            Expr::Op1(op1, e) => {
+                let (prec, assoc, op_str) = match op1 {
+                    Op1::Neg => (9, N, "!"),
+                    Op1::Not => (6, N, "!"),
+                    Op1::ToStr => (10, N, "str"),
+                    Op1::Print => (10, N, "print"),
+                };
+                p.infix(prec, assoc, |p| {
+                    p.pp(op_str);
+                    p.pp(" ");
+                    p.pp_arg(R, e);
+                })
+            }
+            Expr::Op2(op2, e1, e2) => {
+                let (prec, assoc, op_str) = match op2 {
+                    Op2::Add => (8, L, "+"),
+                    Op2::Sub => (8, L, "-"),
+                    Op2::Mul => (9, R, "*"),
+                    Op2::Div => (9, R, "/"),
+                    Op2::Eq => (7, N, "=="),
+                    Op2::Neq => (7, N, "!="),
+                    Op2::Lt => (7, N, "<"),
+                    Op2::Le => (7, N, "<="),
+                    Op2::Gt => (7, N, ">"),
+                    Op2::Ge => (7, N, ">="),
+                    Op2::And => (5, L, "&&"),
+                    Op2::Or => (4, L, "||"),
+                };
+                p.infix(prec, assoc, |p| {
+                    p.pp_arg(L, e1);
+                    p.pp(" ");
+                    p.pp(op_str);
+                    p.pp(" ");
+                    p.pp_arg(R, e2);
+                })
             }
         }
     }

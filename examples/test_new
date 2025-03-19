@@ -1,7 +1,11 @@
-case (inj foo unit : <foo: Unit, bar: Unit>) {
-  foo x → { x }
-  bar x → { x } 
-}
+print (str "foo")
+
+# 2 + 3 * 4 == -5 && false || ! f true
+
+# case (inj foo unit : <foo: Unit, bar: Unit>) {
+#   foo x → { x }
+#   bar x → { x } 
+# }
 
 # let x, y = (unit, unit) in x
 
