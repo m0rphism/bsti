@@ -2,7 +2,10 @@ use crate::{
     regex,
     util::span::{fake_span, Spanned},
 };
-use std::{collections::HashSet, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 pub type Id = String;
 pub type SId = Spanned<Id>;
@@ -399,6 +402,11 @@ impl PartialEq for Type {
             (Type::Int, Type::Int) => true,
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
+            (Type::Variant(cs1), Type::Variant(cs2)) => {
+                let m1: HashMap<&SId, &SType> = HashMap::from_iter(cs1.iter().map(|(x, y)| (x, y)));
+                let m2: HashMap<&SId, &SType> = HashMap::from_iter(cs2.iter().map(|(x, y)| (x, y)));
+                m1 == m2
+            }
             (_, _) => false,
         }
     }

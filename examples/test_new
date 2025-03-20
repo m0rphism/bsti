@@ -1,8 +1,15 @@
-let
-  f : Unit -[ u 0 ]→ Unit -[ u 0 ]→ Unit
-  f x y = x
-in
-unit
+let x = inj foo 23 : <foo: Int, bar: Bool> in
+case x {
+  foo y → { str y }
+  bar y → { str y }
+}
+
+# let
+#   f : Unit -[ u 0 ]→ Unit -[ u 0 ]→ Unit
+#   f x y = x
+# in
+# unit
+
 # if 1 == 2 then
 #   print "foo"
 # else

@@ -6,7 +6,7 @@ use crate::rep::Rep;
 use crate::syntax::{Id, Mult, SId, SType, Session, SessionB, SessionO, SessionOp, Type};
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
-use crate::util::pretty::{Pretty, PrettyEnv};
+use crate::util::pretty::{pretty_def, Pretty, PrettyEnv};
 use crate::util::span::fake_span;
 
 use CtxCtxS::*;
