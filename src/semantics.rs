@@ -8,9 +8,7 @@ use std::{
 
 use crate::{
     fresh_var::fresh_var,
-    syntax::{
-        Const, Expr, Id, Loc, Mult, Op1, Op2, Pattern, SExpr, SId, SPattern, SessionOp, SumLabel,
-    },
+    syntax::{Const, Expr, Id, Op1, Op2, Pattern, SExpr, SId, SPattern, SessionOp, SumLabel},
     util::{
         pretty::{pretty_def, Assoc, Pretty},
         span::fake_span,

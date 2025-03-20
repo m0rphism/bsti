@@ -1,7 +1,4 @@
-use crate::{
-    regex,
-    util::span::{fake_span, Spanned},
-};
+use crate::util::span::{fake_span, Spanned};
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
@@ -9,9 +6,6 @@ use std::{
 
 pub type Id = String;
 pub type SId = Spanned<Id>;
-
-pub type Loc = usize;
-pub type SLoc = Spanned<Loc>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mult {

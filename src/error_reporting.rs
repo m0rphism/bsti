@@ -130,17 +130,6 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             );
         }
         IErr::Typing(e) => match e {
-            TypeError::LocationExpr(l) => {
-                report(
-                    &src,
-                    l.span.clone(),
-                    "Type Error",
-                    [label(
-                        l.span,
-                        "Location expressions are not allowed in surface syntax",
-                    )],
-                );
-            }
             TypeError::UndefinedVariable(x) => {
                 report(
                     &src,

@@ -4,7 +4,7 @@ use crate::{
     ren::Ren,
     rep::Rep,
     syntax::{
-        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SLoc, SMult, SPattern,
+        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SMult, SPattern,
         SSession, SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
@@ -13,7 +13,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
-    LocationExpr(SLoc),
     UndefinedVariable(SId),
     Mismatch(SExpr, Result<SType, String>, SType),
     MismatchMult(SExpr, SType, Result<SMult, String>, SMult),

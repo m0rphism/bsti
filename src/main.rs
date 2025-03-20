@@ -4,7 +4,6 @@ pub mod fresh_var;
 pub mod lexer;
 pub mod parser;
 pub mod pretty;
-pub mod regex;
 pub mod ren;
 pub mod rep;
 pub mod semantics;
