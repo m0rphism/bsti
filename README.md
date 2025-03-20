@@ -9,7 +9,7 @@ Implementation of a typechecker and interpreter for the language from the paper
 
 ## Usage
 
-The following command will compile the project and its dependencies (if necessary) and
+The following command will compile the project and its dependencies (if necessary), and then
 typecheck and run the file `SOURCE_FILE`:
 
 ```bash
