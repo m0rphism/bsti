@@ -150,7 +150,7 @@ Comments are started with a `#` and range until the end of the line.
 
 The following shows the obligatory math server example:
 
-```haskell
+```agda
 let 
   server : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
   server c =
@@ -177,7 +177,7 @@ client c1
 This example can also be written without the syntactic sugar for Haskell-style
 function definitions:
 
-```haskell
+```agda
 let 
   server = \c.
     let x = recv &c in
