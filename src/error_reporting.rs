@@ -1,7 +1,10 @@
 use std::{collections::HashSet, ops::Range};
 
 use crate::{
-    lexer::LexerError, semantics::EvalError, type_checker::TypeError, util::pretty::pretty_def,
+    lexer::LexerError,
+    semantics::EvalError,
+    type_checker::TypeError,
+    util::{pretty::pretty_def, span::Span},
 };
 use ariadne::{ColorGenerator, IndexType, Label, Report, ReportKind, Source};
 use peg::error::ParseError;
@@ -31,19 +34,67 @@ pub fn label(span: Range<usize>, msg: impl AsRef<str>) -> CLabel {
     }
 }
 
+pub fn trim_span(src: &str, span: Range<usize>) -> Range<usize> {
+    if span.start < src.len() && span.end <= src.len() {
+        let bytes: Vec<u8> = src.bytes().collect();
+        let mut s = span.start;
+        loop {
+            if bytes[s].is_ascii_whitespace() && s < span.end {
+                s += 1;
+            } else if bytes[s] == b'#' {
+                while s < span.end && bytes[s] != b'\n' {
+                    s += 1
+                }
+            } else {
+                break;
+            }
+        }
+        let mut e = span.end;
+        loop {
+            if e > s && bytes[e - 1].is_ascii_whitespace() {
+                e -= 1;
+            } else {
+                let mut i = e;
+                let mut found_comment = false;
+                loop {
+                    if i <= s || bytes[i - 1] == b'\n' {
+                        break;
+                    } else if bytes[i - 1] == b'#' {
+                        i -= 1;
+                        e = i;
+                        found_comment = true;
+                        break;
+                    } else {
+                        i -= 1
+                    }
+                }
+                if !found_comment {
+                    break;
+                }
+            }
+        }
+        Span { start: s, end: e }
+    } else {
+        span
+    }
+}
+
 fn report(
     src: &CSource,
-    loc: usize,
+    loc: Range<usize>,
     msg: impl AsRef<str>,
     labels: impl IntoIterator<Item = CLabel>,
 ) {
+    let src_content = std::fs::read_to_string(&src.path).unwrap();
+    let loc = trim_span(&src_content, loc);
     let mut colors = ColorGenerator::new();
     let a = colors.next();
-    Report::build(ReportKind::Error, &src.path, loc)
+    Report::build(ReportKind::Error, (&src.path, loc))
         .with_config(ariadne::Config::default().with_index_type(IndexType::Byte))
         .with_message(msg.as_ref())
         .with_labels(labels.into_iter().map(|l| {
-            Label::new((&src.path, l.span))
+            let sp = trim_span(&src_content, l.span);
+            Label::new((&src.path, sp))
                 .with_message(l.msg)
                 .with_color(a)
         }))
@@ -62,7 +113,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
         IErr::Lexer(e) => {
             report(
                 &src,
-                e.span.start,
+                e.span.clone(),
                 "Lexing failed",
                 [label(e.span, "Lexer got stuck here")],
             );
@@ -70,7 +121,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
         IErr::Parser(e) => {
             report(
                 &src,
-                e.location,
+                e.location..e.location,
                 "Parsing failed",
                 [label(
                     e.location..e.location,
@@ -82,7 +133,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::LocationExpr(l) => {
                 report(
                     &src,
-                    l.span.start,
+                    l.span.clone(),
                     "Type Error",
                     [label(
                         l.span,
@@ -93,7 +144,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::UndefinedVariable(x) => {
                 report(
                     &src,
-                    x.span.start,
+                    x.span.clone(),
                     "Type Error",
                     [label(x.span, "Undefined Variable")],
                 );
@@ -105,7 +156,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 };
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -124,7 +175,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 };
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -144,7 +195,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 };
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -160,7 +211,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::MismatchEffSub(e, p_expected, p_actual) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -175,7 +226,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::MismatchEff(e, p_expected, p_actual) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -190,7 +241,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::MismatchLabel(e, l, t) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -205,7 +256,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::TypeAnnotationMissing(e) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(e.span, "This expression requires a type annotation")],
                 );
@@ -213,7 +264,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CtxSplitFailed(e, ctx, ctx2) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [
                         label(
@@ -230,7 +281,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CtxCtxSplitFailed(e, ctx, xs) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -245,7 +296,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::Shadowing(e, x) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -259,7 +310,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CtxNotUnr(e, ctx) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -273,7 +324,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::SeqDropsOrd(e, t) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -287,7 +338,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::LeftOverVar(e, x, s, s_used) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -317,7 +368,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 let ctx = ctx.restrict(&xs).simplify();
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -331,7 +382,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::MultipleClauses(e) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -342,7 +393,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::NotEnoughPatterns(e) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -353,7 +404,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::PatternMismatch(p, t) => {
                 report(
                     &src,
-                    p.span.start,
+                    p.span.clone(),
                     "Type Error",
                     [label(
                         p.span,
@@ -364,7 +415,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::ClauseWithWrongId(e, x, y) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -379,7 +430,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::ClauseWithZeroPatterns(e) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -390,7 +441,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::InvalidSplit(e, s, s1) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -405,7 +456,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CaseMissingLabel(e, t, l) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -420,7 +471,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CaseExtraLabel(e, t, l) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -431,7 +482,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CaseDuplicateLabel(e, _t, l) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -442,7 +493,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CaseClauseTypeMismatch(e, t1, t2) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -457,7 +508,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::CaseLeftOverMismatch(e, x, s1, s2) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -477,7 +528,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::VariantEmpty(e) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -488,7 +539,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             TypeError::VariantDuplicateLabel(e, t, l) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
@@ -501,14 +552,15 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 );
             }
             TypeError::RecursiveNonFunctionBinding(e, x) => {
+                println!("{:?}", e.span);
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Type Error",
                     [label(
                         e.span,
                         format!(
-                            "This expression binds variable '{}' to a non-function type, but still uses it recursively.",
+                            "This expression uses variable '{}' recursively, but the type of the variable is not an unrestricted function type.",
                             x.val
                         ),
                     )],
@@ -519,7 +571,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             EvalError::ValMismatch(e, v_expected, v_actual) => {
                 report(
                     &src,
-                    e.span.start,
+                    e.span.clone(),
                     "Evaluation Error",
                     [label(
                         e.span,
@@ -531,25 +583,10 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
-            //EvalError::ClosedUnfinished(e, r, w) => {
-            //    report(
-            //        &src,
-            //        e.span.start,
-            //        "Evaluation Error",
-            //        [label(
-            //            e.span,
-            //            format!(
-            //                "This expression tries to close a resource of type {} with unfinished or invalid output '{}'.",
-            //                pretty_def(&r),
-            //                pretty_def(&w),
-            //            ),
-            //        )],
-            //    );
-            //}
             EvalError::UndefinedVar(x) => {
                 report(
                     &src,
-                    x.span.start,
+                    x.span.clone(),
                     "Evaluation Error",
                     [label(x.span, format!("This variable is undefined",))],
                 );
