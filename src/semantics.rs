@@ -237,7 +237,18 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             let v1 = eval_(env, e1)?;
             Ok((Value::Inj(l.val.clone(), Box::new(v1))))
         }
-        Expr::CaseSum(e1, cs) => todo!(),
+        Expr::CaseSum(e1, cs) => {
+            let v1 = eval_(env, e1)?;
+            let Value::Inj(l, v1) = &v1 else {
+                return Err(EvalError::ValMismatch(
+                    e.clone(),
+                    format!("variant injection"),
+                    v1.clone(),
+                ));
+            };
+            let (_, x, e) = cs.iter().find(|(l2, _x, _e)| *l == **l2).unwrap();
+            eval_(&env.ext(x.val.clone(), *v1.clone()), e)
+        }
         Expr::Fork(e1) => {
             let env1 = env.clone();
             let e1 = *e1.clone();
