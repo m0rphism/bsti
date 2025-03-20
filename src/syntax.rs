@@ -86,7 +86,7 @@ pub struct Clause {
 }
 pub type SClause = Spanned<Clause>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Const {
     Unit,
     Int(i64),

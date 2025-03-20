@@ -52,12 +52,13 @@ pub fn run(args: &Args) -> Result<(), IErr> {
     }
     let (e, _t, _p) = typecheck(&src, args.verbose)?;
 
-    //println!("===== EVALUATION =====");
-    //let v = eval(&e).map_err(IErr::Eval)?;
-    //println!(
-    //    "Program terminated successfully with value `{}`.",
-    //    pretty_def(&v)
-    //);
+    println!("===== EVALUATION =====");
+    println!("Program stdout:");
+    let v = eval(&e).map_err(IErr::Eval)?;
+    println!(
+        "Program terminated successfully with value `{}`.",
+        pretty_def(&v)
+    );
     Ok(())
 }
 

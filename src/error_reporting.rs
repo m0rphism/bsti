@@ -502,32 +502,21 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             }
         },
         IErr::Eval(e) => match e {
-            //EvalError::ValMismatch(e, v_expected, v_actual) => {
-            //    report(
-            //        &src,
-            //        e.span.start,
-            //        "Evaluation Error",
-            //        [label(
-            //            e.span,
-            //            format!(
-            //                "This expression evaluates to {} but should be {}.",
-            //                pretty_def(&v_actual),
-            //                v_expected,
-            //            ),
-            //        )],
-            //    );
-            //}
-            //EvalError::UndefinedLoc(e, l) => {
-            //    report(
-            //        &src,
-            //        e.span.start,
-            //        "Evaluation Error",
-            //        [label(
-            //            e.span,
-            //            format!("This expression evaluated to the undefined location {}.", l,),
-            //        )],
-            //    );
-            //}
+            EvalError::ValMismatch(e, v_expected, v_actual) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Evaluation Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "This expression evaluates to {} but should be {}.",
+                            pretty_def(&v_actual),
+                            v_expected,
+                        ),
+                    )],
+                );
+            }
             //EvalError::ClosedUnfinished(e, r, w) => {
             //    report(
             //        &src,
@@ -543,51 +532,14 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
             //        )],
             //    );
             //}
-            //EvalError::UndefinedVar(x) => {
-            //    report(
-            //        &src,
-            //        x.span.start,
-            //        "Evaluation Error",
-            //        [label(x.span, format!("This variable is undefined",))],
-            //    );
-            //}
-            //EvalError::InvalidWrite(e, r, r1) => {
-            //    report(
-            //        &src,
-            //        e.span.start,
-            //        "Evaluation Error",
-            //        [label(
-            //            e.span,
-            //            format!(
-            //                "This expression perform an operation {} which is invalid on a resource of type {}.",
-            //                pretty_def(&r1),
-            //                pretty_def(&r),
-            //            ),
-            //        )],
-            //    );
-            //}
-            //EvalError::NonEmptyHeap(heap) => {
-            //    report(
-            //        &src,
-            //        0,
-            //        format!(
-            //            "Evaluation Error: Program terminated with non-empty heap:\n{}",
-            //            pretty_def(&heap)
-            //        ),
-            //        [],
-            //    );
-            //}
-            //EvalError::AppWithoutAnn(e) => {
-            //    report(
-            //        &src,
-            //        e.span.start,
-            //        "Evaluation Error",
-            //        [label(
-            //            e.span,
-            //            "This application does not have a multiplicity annotation.",
-            //        )],
-            //    );
-            //}
+            EvalError::UndefinedVar(x) => {
+                report(
+                    &src,
+                    x.span.start,
+                    "Evaluation Error",
+                    [label(x.span, format!("This variable is undefined",))],
+                );
+            }
         },
     }
 }

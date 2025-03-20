@@ -155,6 +155,17 @@ impl Pretty<UserState> for Eff {
     }
 }
 
+impl Pretty<UserState> for Const {
+    fn pp(&self, p: &mut PrettyEnv<UserState>) {
+        match self {
+            Const::Unit => p.pp("unit"),
+            Const::Int(v) => p.pp(&v.to_string()),
+            Const::Bool(v) => p.pp(&v.to_string()),
+            Const::String(v) => p.pp(&format!("\"{v}\"")),
+        }
+    }
+}
+
 impl Pretty<UserState> for Expr {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
@@ -277,10 +288,7 @@ impl Pretty<UserState> for Expr {
                 p.pp("&");
                 p.pp(x);
             }
-            Expr::Const(Const::Unit) => p.pp("unit"),
-            Expr::Const(Const::Int(v)) => p.pp(&v.to_string()),
-            Expr::Const(Const::Bool(v)) => p.pp(&v.to_string()),
-            Expr::Const(Const::String(v)) => p.pp(&format!("\"{v}\"")),
+            Expr::Const(c) => p.pp(c),
             Expr::Op1(op1, e) => {
                 let (prec, assoc, op_str) = match op1 {
                     Op1::Neg => (9, N, "!"),

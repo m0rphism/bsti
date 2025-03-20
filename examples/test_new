@@ -1,13 +1,4 @@
-
-
-
-
-
-
-
-
-
-# print (str "foo")
+print (str "foo")
 
 # 2 + 3 * 4 == -5 && false || ! true
 
