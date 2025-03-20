@@ -1,8 +1,22 @@
-let x = inj foo 23 : <foo: Int, bar: Bool> in
-case x {
-  foo y → { str y }
-  bar y → { str y }
-}
+let
+  fac : Int -[ u 0 ]→ Int
+  fac x = if x == 0 then
+            1
+          else
+            x * fac (x - 1)
+in
+  fac 5
+# let 
+#   x : Unit
+#   x = unit
+# in
+#   unit
+
+# let x = inj foo 23 : <foo: Int, bar: Bool> in
+# case x {
+#   foo y → { "foo" + str y }
+#   bar y → { "bar" + str y }
+# }
 
 # let
 #   f : Unit -[ u 0 ]→ Unit -[ u 0 ]→ Unit

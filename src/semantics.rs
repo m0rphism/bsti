@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    process::Output,
     sync::{
         mpsc::{channel, Receiver, Sender},
         Arc, Mutex,
@@ -68,6 +67,7 @@ impl Chan {
 #[derive(Debug, Clone)]
 pub enum Value {
     Abs(Env, SId, SExpr),
+    AbsRec(SId, Env, SId, SExpr),
     Const(Const),
     Pair(Box<Value>, Box<Value>),
     Inj(SumLabel, Box<Value>),
@@ -88,6 +88,15 @@ impl Pretty<()> for Value {
         match self {
             Value::Abs(env, x, e) => p.infix(1, R, |p| {
                 p.pp("λ[");
+                p.pp(env);
+                p.pp("] ");
+                p.pp(x);
+                p.pp(". ");
+                p.pp_arg(R, e);
+                p.pp("");
+            }),
+            Value::AbsRec(f, env, x, e) => p.infix(1, R, |p| {
+                p.pp(&format!("λ[rec {}][", f.val));
                 p.pp(env);
                 p.pp("] ");
                 p.pp(x);
@@ -174,9 +183,13 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
         Expr::App(e1, e2) => {
             let v1 = eval_(env, e1)?;
             let v2 = eval_(env, e2)?;
-            match v1 {
+            match v1.clone() {
                 Value::Abs(env, x, e) => {
                     let env = env.ext(x.val, v2);
+                    eval_(&env, &e)
+                }
+                Value::AbsRec(f, env, x, e) => {
+                    let env = env.ext(f.val, v1.clone()).ext(x.val, v2);
                     eval_(&env, &e)
                 }
                 _ => Err(EvalError::ValMismatch(
@@ -235,7 +248,7 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
         }
         Expr::Inj(l, e1) => {
             let v1 = eval_(env, e1)?;
-            Ok((Value::Inj(l.val.clone(), Box::new(v1))))
+            Ok(Value::Inj(l.val.clone(), Box::new(v1)))
         }
         Expr::CaseSum(e1, cs) => {
             let v1 = eval_(env, e1)?;
@@ -449,16 +462,23 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
         }
         Expr::LetDecl(x, _t, cs, e2) => {
             let c = cs.first().unwrap();
-            let mut fun = c.body.clone();
-            for p in c.pats.iter().rev() {
-                let y = fresh_var();
-                fun = fake_span(Expr::Abs(
-                    y.clone(),
-                    Box::new(pattern_to_let_chain(y, p, fun)),
-                ));
-            }
-            let fun_val = eval_(env, &fun)?;
-            let env = env.ext(x.val.clone(), fun_val);
+            let v1 = if c.pats.len() > 0 {
+                let mut fun = c.body.clone();
+                for p in c.pats.iter().rev() {
+                    let y = fresh_var();
+                    fun = fake_span(Expr::Abs(
+                        y.clone(),
+                        Box::new(pattern_to_let_chain(y, p, fun)),
+                    ));
+                }
+                let Expr::Abs(y, e) = fun.val else {
+                    unreachable!()
+                };
+                Value::AbsRec(x.clone(), env.clone(), y, *e)
+            } else {
+                eval_(env, &c.body)?
+            };
+            let env = env.ext(x.val.clone(), v1);
             eval_(&env, &e2)
         }
     }

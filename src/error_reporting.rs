@@ -500,6 +500,20 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::RecursiveNonFunctionBinding(e, x) => {
+                report(
+                    &src,
+                    e.span.start,
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "This expression binds variable '{}' to a non-function type, but still uses it recursively.",
+                            x.val
+                        ),
+                    )],
+                );
+            }
         },
         IErr::Eval(e) => match e {
             EvalError::ValMismatch(e, v_expected, v_actual) => {

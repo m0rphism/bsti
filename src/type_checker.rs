@@ -46,6 +46,7 @@ pub enum TypeError {
     CaseLeftOverMismatch(SExpr, Id, Session, Option<Session>),
     VariantEmpty(SExpr),
     VariantDuplicateLabel(SExpr, SType, SumLabel),
+    RecursiveNonFunctionBinding(SExpr, SId),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -985,11 +986,11 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             }
 
             let (arg_tys, ret_ty, ret_eff) = split_arrow_type(t);
-            let ret_eff = if let Some(ret_eff) = ret_eff {
-                ret_eff
-            } else {
-                Err(TypeError::ClauseWithZeroPatterns(e.clone()))?
-            };
+            //let ret_eff = if let Some(ret_eff) = ret_eff {
+            //    ret_eff
+            //} else {
+            //    Err(TypeError::ClauseWithZeroPatterns(e.clone()))?
+            //};
             if c.pats.len() != arg_tys.len() {
                 Err(TypeError::NotEnoughPatterns(e.clone()))?
             }
@@ -997,12 +998,22 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let fvs1 = c.free_vars();
             let c1 = ctx.restrict(&fvs1);
             let mut ctx_body = c1.clone();
+            let all_unr = arg_tys.iter().all(|(_t, m)| m.val == Mult::Unr);
+            if c.pats.len() > 0 && all_unr {
+                ctx_body = ext(Mult::Unr, ctx_body, Ctx::Bind(x.clone(), t.clone()));
+            } else {
+                if fvs1.contains(&x.val) {
+                    Err(TypeError::RecursiveNonFunctionBinding(e.clone(), x.clone()))?
+                }
+            }
             for (pat, (arg_ty, m)) in c.pats.iter().zip(arg_tys) {
                 ctx_body = ext(m.val, ctx_body, check_pattern(pat, &arg_ty)?);
             }
             let (mut u1, mut p1) = check(&ctx_body, &c.val.body, &ret_ty)?;
-            if !Eff::leq(p1, ret_eff.val) {
-                Err(TypeError::MismatchEffSub(e.clone(), fake_span(p1), ret_eff))?
+            if let Some(ret_eff) = ret_eff {
+                if !Eff::leq(p1, ret_eff.val) {
+                    Err(TypeError::MismatchEffSub(e.clone(), fake_span(p1), ret_eff))?
+                }
             }
             for p in &c.pats {
                 for x in p.bound_vars() {
