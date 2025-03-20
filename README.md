@@ -18,6 +18,9 @@ cargo run -- SOURCE_FILE
 
 ## Syntax
 
+The following grammer describes the complete, concrete syntax of the language.
+For readability, operator precedence and associativity is omitted.
+
 ```
 Multiplicities
 m ::= 'u' | 'unr'      (unrestricted)
