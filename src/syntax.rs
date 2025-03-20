@@ -33,28 +33,28 @@ pub enum SessionOp {
 }
 pub type SSessionOp = Spanned<SessionOp>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum SessionO {
     Op(SessionOp, Box<SType>, Box<SSessionO>),
     End(SessionOp),
 }
 pub type SSessionO = Spanned<SessionO>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum SessionB {
     Op(SessionOp, Box<SType>, Box<SSessionB>),
     Return,
 }
 pub type SSessionB = Spanned<SessionB>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum Session {
     Owned(SSessionO),
     Borrowed(SSessionB),
 }
 pub type SSession = Spanned<Session>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Chan(SSession),
     Arr(SMult, SEff, Box<SType>, Box<SType>),
@@ -198,9 +198,7 @@ impl SessionO {
     pub fn split(&self, s1: &SessionB) -> Option<Self> {
         match (self, s1) {
             (_, SessionB::Return) => Some(self.clone()),
-            (SessionO::Op(op1, t1, s1), SessionB::Op(op2, t2, s2))
-                if op1 == op2 && t1.is_equal_to(&t2) =>
-            {
+            (SessionO::Op(op1, t1, s1), SessionB::Op(op2, t2, s2)) if op1 == op2 && t1.eq(&t2) => {
                 s1.split(&s2)
             }
             _ => None,
@@ -220,9 +218,7 @@ impl SessionB {
     pub fn split(&self, s1: &SessionB) -> Option<Self> {
         match (self, s1) {
             (_, SessionB::Return) => Some(self.clone()),
-            (SessionB::Op(op1, t1, s1), SessionB::Op(op2, t2, s2))
-                if op1 == op2 && t1.is_equal_to(&t2) =>
-            {
+            (SessionB::Op(op1, t1, s1), SessionB::Op(op2, t2, s2)) if op1 == op2 && t1.eq(&t2) => {
                 s1.split(&s2)
             }
             _ => None,
@@ -350,19 +346,11 @@ impl Pattern {
     }
 }
 
-impl SessionO {
-    //pub fn is_subtype_of(&self, other: &Self) -> bool {
-    //    match (other, self) {
-    //        (SessionO::Op(o1, t1, s1), SessionO::Op(o2, t2, s2)) => todo!(),
-    //        (SessionO::Op(o1, t1, s1), SessionO::End(o2)) => todo!(),
-    //        (SessionO::End(o1), SessionO::Op(o2, t2, s2)) => todo!(),
-    //        (SessionO::End(o1), SessionO::End(o2)) => todo!(),
-    //    }
-    //}
-    pub fn is_equal_to(&self, other: &Self) -> bool {
+impl PartialEq for SessionO {
+    fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (SessionO::Op(op1, t1, s1), SessionO::Op(op2, t2, s2)) => {
-                op1 == op2 && t1.is_equal_to(t2) && s1.is_equal_to(s2)
+                op1 == op2 && t1.eq(t2) && s1.eq(s2)
             }
             (SessionO::Op(_, _, _), SessionO::End(_)) => false,
             (SessionO::End(_), SessionO::Op(_, _, _)) => false,
@@ -371,15 +359,11 @@ impl SessionO {
     }
 }
 
-impl SessionB {
-    //pub fn is_subtype_of(&self, other: &Self) -> bool {
-    //    match (other, self) {
-    //    }
-    //}
-    pub fn is_equal_to(&self, other: &Self) -> bool {
+impl PartialEq for SessionB {
+    fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (SessionB::Op(op1, t1, s1), SessionB::Op(op2, t2, s2)) => {
-                op1 == op2 && t1.is_equal_to(t2) && s1.is_equal_to(s2)
+                op1 == op2 && t1.eq(t2) && s1.eq(s2)
             }
             (SessionB::Op(_, _, _), SessionB::Return) => false,
             (SessionB::Return, SessionB::Op(_, _, _)) => false,
@@ -388,51 +372,26 @@ impl SessionB {
     }
 }
 
-impl Session {
-    pub fn is_subtype_of(&self, other: &Self) -> bool {
-        unimplemented!()
-        //match (self, other) {
-        //    (Session::Owned(s1), Session::Owned(s2)) => s1.is_subtype_of(s2),
-        //    (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
-        //    (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
-        //    (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_subtype_of(s2),
-        //}
-    }
-    pub fn is_equal_to(&self, other: &Self) -> bool {
+impl PartialEq for Session {
+    fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Session::Owned(s1), Session::Owned(s2)) => s1.is_equal_to(s2),
+            (Session::Owned(s1), Session::Owned(s2)) => s1.eq(s2),
             (Session::Owned(_s1), Session::Borrowed(_s2)) => false,
             (Session::Borrowed(_s1), Session::Owned(_s2)) => false,
-            (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.is_equal_to(s2),
+            (Session::Borrowed(s1), Session::Borrowed(s2)) => s1.eq(s2),
         }
     }
 }
 
-impl Type {
-    pub fn is_subtype_of(&self, other: &Type) -> bool {
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Type::Unit, Type::Unit) => true,
-            (Type::Chan(s1), Type::Chan(s2)) => s1.is_subtype_of(s2),
+            (Type::Chan(s1), Type::Chan(s2)) => s1.eq(s2),
             (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
-                m1.val == m2.val
-                    && p1.val == p2.val
-                    && t11.is_subtype_of(t21)
-                    && t22.is_subtype_of(t12)
+                m1.val == m2.val && p1.val == p2.val && t11.eq(t21) && t12.eq(t22)
             }
             (Type::Prod(m1, t11, t12), Type::Prod(m2, t21, t22)) => {
-                m1.val == m2.val && t11.is_subtype_of(t21) && t12.is_subtype_of(t22)
-            }
-            (_, _) => false,
-        }
-    }
-    pub fn is_equal_to(&self, other: &Type) -> bool {
-        match (self, other) {
-            (Type::Chan(s1), Type::Chan(s2)) => s1.is_equal_to(s2),
-            (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
-                m1.val == m2.val && p1.val == p2.val && t11.is_equal_to(t21) && t12.is_equal_to(t22)
-            }
-            (Type::Prod(m1, t11, t12), Type::Prod(m2, t21, t22)) => {
-                m1.val == m2.val && t11.is_equal_to(t21) && t12.is_equal_to(t22)
+                m1.val == m2.val && t11.eq(t21) && t12.eq(t22)
             }
             (Type::Unit, Type::Unit) => true,
             (Type::Int, Type::Int) => true,
@@ -441,12 +400,50 @@ impl Type {
             (_, _) => false,
         }
     }
+}
+
+impl Eq for SessionO {}
+impl Eq for SessionB {}
+impl Eq for Session {}
+impl Eq for Type {}
+
+// Inefficient but correct for the custom equality
+impl Hash for SessionO {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+impl Hash for SessionB {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+impl Hash for Session {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+impl Hash for Type {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+}
+
+impl Type {
+    //pub fn is_subtype_of(&self, other: &Type) -> bool {
+    //    match (self, other) {
+    //        (Type::Unit, Type::Unit) => true,
+    //        (Type::Chan(s1), Type::Chan(s2)) => s1.is_subtype_of(s2),
+    //        (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
+    //            m1.val == m2.val
+    //                && p1.val == p2.val
+    //                && t11.is_subtype_of(t21)
+    //                && t22.is_subtype_of(t12)
+    //        }
+    //        (Type::Prod(m1, t11, t12), Type::Prod(m2, t21, t22)) => {
+    //            m1.val == m2.val && t11.is_subtype_of(t21) && t12.is_subtype_of(t22)
+    //        }
+    //        (_, _) => false,
+    //    }
+    //}
 
     pub fn is_unr(&self) -> bool {
         match self {
             Type::Chan(_) => false,
             Type::Arr(m, _, _, _) => m.val == Mult::Unr,
-            Type::Prod(m, _, _) => m.val == Mult::Unr,
+            Type::Prod(m, t1, t2) => m.val == Mult::Unr || (t1.is_unr() && t2.is_unr()),
             Type::Variant(cs) => cs.iter().all(|(_, t)| t.is_unr()),
             Type::Unit => true,
             Type::Int => true,

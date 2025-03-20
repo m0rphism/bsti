@@ -1,6 +1,29 @@
-print (str "foo")
 
-# 2 + 3 * 4 == -5 && false || ! f true
+
+
+
+
+
+
+
+let 
+  server = \c.
+    let x = recv (&c : Chan (?Int.return)) in
+    let y = recv (&c : Chan (?Int.return)) in
+    let _ = send (x + y) &c in
+    wait c
+  : Chan (?Int.?Int.!Int.wait) -[ u 0 ]→ Unit
+in
+
+let
+  client = unit
+in
+
+unit
+
+# print (str "foo")
+
+# 2 + 3 * 4 == -5 && false || ! true
 
 # case (inj foo unit : <foo: Unit, bar: Unit>) {
 #   foo x → { x }

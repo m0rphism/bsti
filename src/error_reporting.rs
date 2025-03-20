@@ -322,7 +322,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!(
-                            "This expression has unused variables that must be used: {}",
+                            "This expression has unused variables that must be used:  {}",
                             pretty_def(&ctx)
                         ),
                     )],

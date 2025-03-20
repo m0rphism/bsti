@@ -641,6 +641,38 @@ impl Pretty<()> for CtxCtx {
     }
 }
 
+impl Pretty<()> for SemCtx {
+    fn pp(&self, p: &mut PrettyEnv<()>) {
+        p.pp("Unrestricted:\n");
+        let mut unr = self.unr.iter().collect::<Vec<_>>();
+        unr.sort_by_key(|(x, _t)| x);
+        for (x, t) in unr {
+            p.pp("  ");
+            p.pp(x);
+            p.pp(" : ");
+            p.pp(t);
+            p.pp("\n");
+        }
+        p.pp("\nGraph:\n");
+        let mut ord = self.ord.edges.iter().collect::<Vec<_>>();
+        ord.sort_by_key(|((x, _t), _ys)| x);
+        for ((x, t), ys) in ord {
+            p.pp("  ");
+            p.pp(x);
+            p.pp(" : ");
+            p.pp(t);
+            p.pp("\n");
+            for (x, t) in ys {
+                p.pp("    ");
+                p.pp(x);
+                p.pp(" : ");
+                p.pp(t);
+                p.pp("\n");
+            }
+        }
+    }
+}
+
 impl<T: Ord + Eq + Hash + Pretty<()>> Pretty<()> for HashSet<T> {
     fn pp(&self, p: &mut PrettyEnv<()>) {
         let mut xs: Vec<_> = self.iter().collect();

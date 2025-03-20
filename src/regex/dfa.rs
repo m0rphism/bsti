@@ -199,7 +199,7 @@ impl<C: Copy + Debug + Eq + Hash + Display + Realizable> DFA<C> {
         }
         true
     }
-    pub fn is_equal_to(&self, other: &Self) -> bool {
+    pub fn eq(&self, other: &Self) -> bool {
         self.is_subseteq_of(other) && other.is_subseteq_of(self)
     }
 }

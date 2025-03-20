@@ -3,10 +3,24 @@ use std::ops::{Deref, DerefMut, Range};
 
 pub type Span = Range<usize>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Spanned<T> {
     pub val: T,
     pub span: Span,
+}
+
+impl<T: PartialEq> PartialEq for Spanned<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.val.eq(&other.val)
+    }
+}
+
+impl<T: Eq> Eq for Spanned<T> {}
+
+impl<T: Hash> Hash for Spanned<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.val.hash(state)
+    }
 }
 
 impl<T> Spanned<T> {

@@ -76,7 +76,7 @@ fn re_to_dfa_to_re_1() {
     let e1 = star(seq(char_(b'a'), char_(b'b')));
     // eprintln!("{}", e1.to_dfa().minimized());
     // assert_eq!(e1, e1.to_dfa().to_regex().simplify());
-    assert!(e1.is_equal_to(&e1.to_dfa().to_regex()));
+    assert!(e1.eq(&e1.to_dfa().to_regex()));
 }
 
 // #[test]
@@ -101,7 +101,7 @@ fn re_to_dfa_to_re_1() {
 //         let dfa = e.to_dfa().minimized();
 //         let e2 = dfa.to_regex();
 //         assert!(
-//             e.is_equal_to(&e2),
+//             e.eq(&e2),
 //             "Not equal:\n  {}\n  {}\n  {}",
 //             pretty_def(&e),
 //             pretty_def(&e2),
@@ -121,7 +121,7 @@ fn bar() {
     eprintln!("DFA 2: {dfa2}");
 
     assert!(
-        e1.is_equal_to(&e2),
+        e1.eq(&e2),
         "Not equal:\n  {}\n  {}\n",
         pretty_def(&e1.simplify()),
         pretty_def(&e2.simplify()),
@@ -136,7 +136,7 @@ fn bar() {
 //     let dfa = e.to_dfa().minimized();
 //     let e2 = dfa.to_regex();
 //     assert!(
-//         e.is_equal_to(&e2),
+//         e.eq(&e2),
 //         "Not equal:\n  {}\n  {}\n  {}",
 //         pretty_def(&e.simplify()),
 //         pretty_def(&e2.simplify()),

@@ -6,7 +6,7 @@ pub struct Graph<L: Eq + Hash> {
     pub edges: HashMap<L, HashSet<L>>,
 }
 
-impl<L: Clone + Eq + Hash> Graph<L> {
+impl<L: Clone + Eq + Hash + std::fmt::Debug> Graph<L> {
     pub fn empty() -> Self {
         Graph {
             edges: HashMap::new(),

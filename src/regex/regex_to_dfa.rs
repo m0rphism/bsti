@@ -79,11 +79,11 @@ impl<C: Copy + Debug + Eq + Hash + Ord + Display + Example + Realizable> Regex<C
         dfa2.minimize();
         dfa1.is_subseteq_of(&dfa2)
     }
-    pub fn is_equal_to(&self, other: &Self) -> bool {
+    pub fn eq(&self, other: &Self) -> bool {
         let mut dfa1 = self.to_dfa();
         dfa1.minimize();
         let mut dfa2 = other.to_dfa();
         dfa2.minimize();
-        dfa1.is_equal_to(&dfa2)
+        dfa1.eq(&dfa2)
     }
 }

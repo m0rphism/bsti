@@ -62,6 +62,12 @@ pub enum Token<'a> {
     Unit,
     #[token("Unit")]
     UnitT,
+    #[token("Int")]
+    IntT,
+    #[token("Bool")]
+    BoolT,
+    #[token("String")]
+    StringT,
     #[token("drop")]
     Drop,
     #[token("unr")]
@@ -290,6 +296,9 @@ impl<'a> Token<'a> {
             Token::DoubleAmp => "&&",
             Token::ToStr => "str",
             Token::Print => "print",
+            Token::IntT => "Int",
+            Token::BoolT => "Bool",
+            Token::StringT => "String",
         }
     }
 }

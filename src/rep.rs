@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::syntax::{Id, Session};
+use crate::{
+    syntax::{Id, Session},
+    util::pretty::pretty_def,
+};
 
 #[derive(Debug, Clone)]
 pub struct Rep {
@@ -37,10 +40,10 @@ impl Rep {
         u.remove_mut(x);
         u
     }
-    pub fn is_equal_to(&self, u: &Self) -> bool {
+    pub fn eq(&self, u: &Self) -> bool {
         for (x, s1) in &self.map {
             if let Some(s2) = u.map.get(x) {
-                if !s1.is_equal_to(s2) {
+                if !s1.eq(s2) {
                     return false;
                 }
             } else {

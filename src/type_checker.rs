@@ -8,7 +8,7 @@ use crate::{
         SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
-    util::span::fake_span,
+    util::{pretty::pretty_def, span::fake_span},
 };
 
 #[derive(Debug, Clone)]
@@ -52,7 +52,7 @@ pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), T
     match &t.val {
         Type::Chan(s) => {
             if let Some(s2) = u.map.get(&x.val) {
-                if !s.is_equal_to(s2) {
+                if **s != *s2 {
                     Err(TypeError::LeftOverVar(
                         e.clone(),
                         x.clone(),
@@ -87,21 +87,36 @@ pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, SessionB> {
 
 pub fn rename_vars(r: &Ren, xs: &HashSet<Id>) -> HashSet<Id> {
     let mut out = HashSet::new();
-    xs.iter().map(|x| {
+    for x in xs {
         if let Some(y) = r.map.get(x) {
             out.insert(y.clone());
         }
         out.insert(x.clone());
-    });
+    }
     out
 }
 
 pub fn intersection<T: std::hash::Hash + Eq + Clone>(
     xss: impl IntoIterator<Item = HashSet<T>>,
 ) -> HashSet<T> {
+    let xss: Vec<_> = xss.into_iter().collect();
+    if xss.len() == 0 {
+        return HashSet::new();
+    }
+    let mut it = xss.into_iter();
+    let mut out = it.next().unwrap().clone();
+    for xs in it {
+        out = out.intersection(&xs).cloned().collect();
+    }
+    out
+}
+
+pub fn union<T: std::hash::Hash + Eq + Clone>(
+    xss: impl IntoIterator<Item = HashSet<T>>,
+) -> HashSet<T> {
     let mut out = HashSet::new();
     for xs in xss {
-        out = out.intersection(&xs).cloned().collect();
+        out = out.union(&xs).cloned().collect();
     }
     out
 }
@@ -117,7 +132,7 @@ pub fn check_split_alg_gen(
     cc2: &CtxCtx,
 ) -> Result<(), TypeError> {
     let fvs1 = e1.free_vars();
-    let fvs2 = intersection(e2s.iter().map(|e| e.free_vars()));
+    let fvs2 = union(e2s.iter().map(|e| e.free_vars()));
     let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
     let sis = split_infos(&fvs, &u1);
     let r1 = Ren::fresh_from(sis.keys(), "1");
@@ -127,8 +142,8 @@ pub fn check_split_alg_gen(
 
     let c12 = cc2
         .replace(u2)
-        .rename(&r1)
-        .fill(ctx1.replace(u1).rename(&r2));
+        .rename(&r2)
+        .fill(ctx1.replace(u1).rename(&r1));
     if !ctx_split.is_subctx_of(&c12) {
         Err(TypeError::CtxSplitFailed(
             e.clone(),
@@ -162,7 +177,7 @@ pub fn compute_ctx_ctx(
     ctx: &Ctx,
 ) -> Result<CtxCtx, TypeError> {
     let fvs1 = e1.free_vars();
-    let fvs2 = intersection(e2s.iter().map(|e| e.free_vars()));
+    let fvs2 = union(e2s.iter().map(|e| e.free_vars()));
     let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
     let sis = split_infos(&fvs, &u1);
     let r1 = Ren::fresh_from(sis.keys(), "1");
@@ -236,7 +251,7 @@ pub fn check_variant_label_eq(
 pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
     for (x, s1) in &u1.map {
         if let Some(s2) = u2.map.get(x) {
-            if !s1.is_equal_to(s2) {
+            if !s1.eq(s2) {
                 return Err(TypeError::CaseLeftOverMismatch(
                     e.clone(),
                     x.clone(),
@@ -377,7 +392,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
         }
         _ => {
             let (t2, u, p) = infer(ctx, e)?;
-            if t.val.is_equal_to(&t2.val) {
+            if t.val.eq(&t2.val) {
                 Ok((u, p))
             } else {
                 Err(TypeError::Mismatch(e.clone(), Ok(t.clone()), t2))
@@ -453,7 +468,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     t1.clone(),
                 ));
             };
-            if !t1.is_equal_to(t11) {
+            if !t1.eq(t11) {
                 return Err(TypeError::Mismatch(
                     *e1.clone(),
                     Ok(*t11.clone()),
@@ -567,6 +582,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             // Assert that channel arguments are used up.
             if_chan_then_used(&e, &t1, &u2, &x)?;
+            let u2 = u2.remove(&x);
 
             check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
 
@@ -641,6 +657,8 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if_chan_then_used(&e, &t1, &u2, &x)?;
             if_chan_then_used(&e, &t2, &u2, &y)?;
 
+            let u2 = u2.remove(&x).remove(&y);
+
             check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
@@ -697,7 +715,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 if_chan_then_used(&e_, &t2_, &u2_, &x_)?;
 
                 if let Some((t2, u2, p2)) = &mut out {
-                    if !t2.is_equal_to(&t2_) {
+                    if *t2 != t2_ {
                         return Err(TypeError::CaseClauseTypeMismatch(
                             e.clone(),
                             t2.clone(),
