@@ -1,0 +1,21 @@
+let 
+  server = \c.
+    let x = recv (&c : Chan (?Int.return)) in
+    let y = recv (&c : Chan (?Int.return)) in
+    send (x + y) &c;
+    wait c
+  : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
+in
+
+let
+  client = \c.
+    send 1 &c;
+    send 2 &c;
+    print (recv (&c : Chan (?Int.return)));
+    term c
+  : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
+in
+
+let c1, c2 = new (!Int.!Int.?Int.term) in
+fork (server c2);
+client c1
