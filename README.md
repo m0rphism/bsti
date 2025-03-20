@@ -23,39 +23,39 @@ For readability, operator precedence and associativity is omitted.
 
 ```
 Multiplicities
-m ::= 'u' | 'unr'      (unrestricted)
-    | 'p' | 'lin'      (linear/"parallel")
-    | 'l' | 'left'     (left ordered)
-    | 'r' | 'right'    (right ordered)
+m ::= 'u' | 'unr'                   (unrestricted)
+    | 'p' | 'lin'                   (linear/"parallel")
+    | 'l' | 'left'                  (left ordered)
+    | 'r' | 'right'                 (right ordered)
 
 Effects
-E ::= '0'   (pure)
-    | '1'   (impure)
+E ::= '0'                           (pure)
+    | '1'                           (impure)
 
 Types
-t ::= t '-[' m ';'? E ']->' t  (function type)
-    | t '*[' m ']' t           (product type)
-    | '<' (l ':' t ',')* '>'   (variant type)
-    | 'Chan' s                 (session type)
-    | 'Unit'                   (unit type)
-    | 'Int'                    (64bit signed integer type)
-    | 'Bool'                   (boolean t type)
-    | 'String'                 (unicode string type)
+t ::= t '-[' m ';'? E ']->' t       (function type)
+    | t '*[' m ']' t                (product type)
+    | '<' (l ':' t ',')* '>'        (variant type)
+    | 'Chan' s                      (session type)
+    | 'Unit'                        (unit type)
+    | 'Int'                         (64bit signed integer type)
+    | 'Bool'                        (boolean t type)
+    | 'String'                      (unicode string type)
 
 Session Types
-s ::= so    (owned session type)
-    | sb    (borrowed session type)
+s ::= so                            (owned session type)
+    | sb                            (borrowed session type)
 
 Owned Session Types
-so ::= '!' t '.' so    (sending session type)
-     | '?' t '.' so    (receiving session type)
-     | 'term'          (sending end of protocol)
-     | 'wait'          (receiving end of protocol)
+so ::= '!' t '.' so                 (sending session type)
+     | '?' t '.' so                 (receiving session type)
+     | 'term'                       (sending end of protocol)
+     | 'wait'                       (receiving end of protocol)
 
 Borrowed Session Types
-sb ::= '!' t '.' sb    (sending session type)
-     | '?' t '.' sb    (receiving session type)
-     | 'return'        (enf of protocol)
+sb ::= '!' t '.' sb                 (sending session type)
+     | '?' t '.' sb                 (receiving session type)
+     | 'return'                     (end of protocol)
 
 Expressions
 e ::= x                             (variable)
@@ -126,16 +126,16 @@ Integer Literals
 <int> ::= '-'? [0-9]+
 
 String Literals
-<str> ::= '"' [^"]* '"'            (strings like "foo")
-        | '\'' [^"]* '\''          (strings like 'foo')
-        | '\'\'\'' [^"]* '\'\'\''  (strings like '''foo''')
+<str> ::= '"' [^"]* '"'             (strings like "foo")
+        | '\'' [^"]* '\''           (strings like 'foo')
+        | '\'\'\'' [^"]* '\'\'\''   (strings like '''foo''')
 
 Patterns
-p ::= x                  (variable pattern)
-    | '(' p1 ',' p2 ')'  (pair pattern)
+p ::= x                             (variable pattern)
+    | '(' p1 ',' p2 ')'             (pair pattern)
     
 Program
-P ::= e    (main expression)
+P ::= e                             (main expression)
 ```
 
 We also provide unicode alternatives for certain tokens:
