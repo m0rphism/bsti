@@ -18,7 +18,7 @@ cargo run -- SOURCE_FILE
 
 ## Syntax
 
-The following grammer describes the complete, concrete syntax of the language.
+The following grammer describes the complete, concrete syntax supported by the interpreter.
 For readability, operator precedence and associativity is omitted.
 
 ```
