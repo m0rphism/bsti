@@ -152,6 +152,33 @@ The following shows the obligatory math server example:
 
 ```
 let 
+  server : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
+  server c =
+    let x = recv &c in
+    let y = recv &c in
+    send (x + y) &c;
+    wait c
+in
+
+let
+  client : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
+  client c =
+    send 1 &c;
+    send 2 &c;
+    print (recv &c);
+    term c
+in
+
+let c1, c2 = new (!Int.!Int.?Int.term) in
+fork (server c2);
+client c1
+```
+
+This example can also be written without the syntactic sugar for Haskell-style
+function definitions:
+
+```
+let 
   server = \c.
     let x = recv &c in
     let y = recv &c in
@@ -174,28 +201,3 @@ fork (server c2);
 client c1
 ```
 
-This example can also be written alternative with the "let-declaration" syntax:
-
-```
-let 
-  server : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
-  server c =
-    let x = recv &c in
-    let y = recv &c in
-    send (x + y) &c;
-    wait c
-in
-
-let
-  client : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
-  client c =
-    send 1 &c;
-    send 2 &c;
-    print (recv &c);
-    term c
-in
-
-let c1, c2 = new (!Int.!Int.?Int.term) in
-fork (server c2);
-client c1
-```
