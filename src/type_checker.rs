@@ -397,6 +397,49 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
     }
 }
 
+pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
+    match &e.val {
+        Expr::Borrow(x) => {
+            // Lookup type of `x`
+            let t = match ctx.lookup_ord_pure(x) {
+                Some((ctx, t)) => {
+                    assert_unr_ctx(e, &ctx)?;
+                    t
+                }
+                None => return Err(TypeError::UndefinedVariable(x.clone())),
+            };
+            // Assert that type of `x` is a channel
+            // TODO
+            let err = Err(TypeError::Mismatch(
+                e.clone(),
+                Err("Chan ?t.s  (for some type t and session s)".to_owned()),
+                t.clone(),
+            ));
+            let Type::Chan(s) = t.val else {
+                return err;
+            };
+            let t = match s.val {
+                Session::Owned(s) => match s.val {
+                    SessionO::Op(SessionOp::Recv, t, _s) => t,
+                    _ => return err,
+                },
+                Session::Borrowed(s) => match s.val {
+                    SessionB::Op(SessionOp::Recv, t, _s) => t,
+                    _ => return err,
+                },
+            };
+            let s1 = Session::Borrowed(fake_span(SessionB::Op(
+                SessionOp::Recv,
+                t,
+                Box::new(fake_span(SessionB::Return)),
+            )));
+            let u = Rep::single(x.val.clone(), s1.clone());
+            Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
+        }
+        _ => infer(ctx, e),
+    }
+}
+
 pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
@@ -811,7 +854,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             Ok((fake_span(Type::Unit), u1.join(&u2), Eff::Yes))
         }
         Expr::Recv(e1) => {
-            let (t, u, _p) = infer(ctx, e1)?;
+            let (t, u, _p) = infer_recv_arg(ctx, e1)?;
 
             let err = Err(TypeError::Mismatch(
                 *e1.clone(),
