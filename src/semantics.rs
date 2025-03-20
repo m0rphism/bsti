@@ -353,7 +353,6 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
         }
         Expr::Const(c) => Ok(Value::Const(c.clone())),
         Expr::Ann(e1, _t) => eval_(env, e1),
-        Expr::LetDecl(spanned, spanned1, vec, spanned2) => todo!(),
         Expr::Seq(e1, e2) => {
             let _ = eval_(env, e1)?;
             eval_(env, e2)
@@ -437,6 +436,20 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             };
             eval_(env, if *b { e2 } else { e3 })
         }
+        Expr::LetDecl(x, _t, cs, e2) => {
+            let c = cs.first().unwrap();
+            let mut fun = c.body.clone();
+            for p in c.pats.iter().rev() {
+                let y = fresh_var();
+                fun = fake_span(Expr::Abs(
+                    y.clone(),
+                    Box::new(pattern_to_let_chain(y, p, fun)),
+                ));
+            }
+            let fun_val = eval_(env, &fun)?;
+            let env = env.ext(x.val.clone(), fun_val);
+            eval_(&env, &e2)
+        }
     }
 }
 
@@ -453,41 +466,25 @@ pub fn eval(e: &SExpr) -> Result<Value, EvalError> {
     Ok(v)
 }
 
-//        Expr::LetDecl(x, _t, cs, e) => {
-//            let c = cs.first().unwrap();
-//            let mut fun = c.body.clone();
-//            for p in c.pats.iter().rev() {
-//                let y = fresh_var();
-//                fun = fake_span(Expr::Abs(
-//                    None,
-//                    y.clone(),
-//                    Box::new(pattern_to_let_chain(y, p, fun)),
-//                ));
-//            }
-//            let fun_val = eval_(heap, env, &fun)?;
-//            let env = env.ext(x.val.clone(), fun_val);
-//            eval_(heap, &env, &e)
-//        }
-//
-//pub fn pattern_to_let_chain(x: SId, p: &SPattern, body: SExpr) -> SExpr {
-//    match &p.val {
-//        Pattern::Var(y) => fake_span(Expr::Let(
-//            y.clone(),
-//            Box::new(fake_span(Expr::Var(x.clone()))),
-//            Box::new(body),
-//        )),
-//        Pattern::Pair(p1, p2) => {
-//            let x1 = fresh_var();
-//            let x2 = fresh_var();
-//            let body = pattern_to_let_chain(x2.clone(), p2, body);
-//            let body = pattern_to_let_chain(x1.clone(), p1, body);
-//            let body = fake_span(Expr::LetPair(
-//                x1,
-//                x2,
-//                Box::new(fake_span(Expr::Var(x.clone()))),
-//                Box::new(body),
-//            ));
-//            body
-//        }
-//    }
-//}
+pub fn pattern_to_let_chain(x: SId, p: &SPattern, body: SExpr) -> SExpr {
+    match &p.val {
+        Pattern::Var(y) => fake_span(Expr::Let(
+            y.clone(),
+            Box::new(fake_span(Expr::Var(x.clone()))),
+            Box::new(body),
+        )),
+        Pattern::Pair(p1, p2) => {
+            let x1 = fresh_var();
+            let x2 = fresh_var();
+            let body = pattern_to_let_chain(x2.clone(), p2, body);
+            let body = pattern_to_let_chain(x1.clone(), p1, body);
+            let body = fake_span(Expr::LetPair(
+                x1,
+                x2,
+                Box::new(fake_span(Expr::Var(x.clone()))),
+                Box::new(body),
+            ));
+            body
+        }
+    }
+}

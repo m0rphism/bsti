@@ -74,7 +74,7 @@ pub type SSumLabel = Spanned<SumLabel>;
 pub enum Pattern {
     Var(SId),
     Pair(Box<SPattern>, Box<SPattern>),
-    Inj(SumLabel, Box<SPattern>),
+    //Inj(SumLabel, Box<SPattern>),
 }
 pub type SPattern = Spanned<Pattern>;
 
@@ -343,7 +343,7 @@ impl Pattern {
         match self {
             Pattern::Var(x) => HashSet::from([x.val.clone()]),
             Pattern::Pair(p1, p2) => union(p1.bound_vars(), p2.bound_vars()),
-            Pattern::Inj(_l, p) => p.bound_vars(),
+            //Pattern::Inj(_l, p) => p.bound_vars(),
         }
     }
 }

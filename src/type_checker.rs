@@ -4,8 +4,8 @@ use crate::{
     ren::Ren,
     rep::Rep,
     syntax::{
-        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SEff, SExpr, SId, SLoc, SMult, SPattern, SSession,
-        SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
+        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SLoc, SMult, SPattern,
+        SSession, SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::{pretty::pretty_def, span::fake_span},
@@ -125,14 +125,12 @@ pub fn check_split_alg_gen(
     e: &SExpr,
     u1: &Rep,
     u2: &Rep,
-    e1: &SExpr,
-    e2s: &[&SExpr],
+    fvs1: &HashSet<Id>,
+    fvs2: &HashSet<Id>,
     ctx: &Ctx,
     ctx1: &Ctx,
     cc2: &CtxCtx,
 ) -> Result<(), TypeError> {
-    let fvs1 = e1.free_vars();
-    let fvs2 = union(e2s.iter().map(|e| e.free_vars()));
     let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
     let sis = split_infos(&fvs, &u1);
     let r1 = Ren::fresh_from(sis.keys(), "1");
@@ -158,26 +156,24 @@ pub fn check_split_alg(
     e: &SExpr,
     u1: &Rep,
     u2: &Rep,
-    e1: &SExpr,
-    e2: &SExpr,
+    fvs1: &HashSet<Id>,
+    fvs2: &HashSet<Id>,
     ctx: &Ctx,
     ctx1: &Ctx,
     ctx2: &Ctx,
     o: JoinOrd,
 ) -> Result<(), TypeError> {
     let cc2 = CtxCtx::JoinL(Box::new(CtxCtx::Hole), Box::new(ctx2.clone()), o);
-    check_split_alg_gen(e, u1, u2, e1, &[e2], ctx, ctx1, &cc2)
+    check_split_alg_gen(e, u1, u2, fvs1, fvs2, ctx, ctx1, &cc2)
 }
 
 pub fn compute_ctx_ctx(
     e: &SExpr,
     u1: &Rep,
-    e1: &SExpr,
-    e2s: &[&SExpr],
+    fvs1: &HashSet<Id>,
+    fvs2: &HashSet<Id>,
     ctx: &Ctx,
 ) -> Result<CtxCtx, TypeError> {
-    let fvs1 = e1.free_vars();
-    let fvs2 = union(e2s.iter().map(|e| e.free_vars()));
     let fvs: HashSet<Id> = fvs1.intersection(&fvs2).cloned().collect();
     let sis = split_infos(&fvs, &u1);
     let r1 = Ren::fresh_from(sis.keys(), "1");
@@ -440,7 +436,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c2 = ctx.restrict(&fvs2).split_off(&u1);
             let (u2, p2) = check(&c2, e2, &t11)?;
 
-            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, m.to_join_ord())?;
+            check_split_alg(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &c2, m.to_join_ord())?;
 
             if m.val == Mult::OrdL && p2 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -485,7 +481,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 ));
             }
 
-            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, m.to_join_ord())?;
+            check_split_alg(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &c2, m.to_join_ord())?;
 
             if p1 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -559,11 +555,12 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         }
         Expr::Let(x, e1, e2) => {
             let fvs1 = e1.free_vars();
+            let fvs2 = e2.free_vars();
 
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
 
-            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if cc.vars().contains(&x.val) {
                 Err(TypeError::Shadowing(e.clone(), x.clone()))?
@@ -584,12 +581,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if_chan_then_used(&e, &t1, &u2, &x)?;
             let u2 = u2.remove(&x);
 
-            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::Seq(e1, e2) => {
             let fvs1 = e1.free_vars();
+            let fvs2 = e2.free_vars();
 
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
@@ -598,7 +596,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 return Err(TypeError::SeqDropsOrd(e.clone(), t1.clone()));
             }
 
-            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if !cc.is_left() && p1 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -611,12 +609,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c2 = cc.fill(Ctx::Empty);
             let (t2, u2, p2) = infer(&c2, e2)?;
 
-            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::LetPair(x, y, e1, e2) => {
             let fvs1 = e1.free_vars();
+            let fvs2 = e2.free_vars();
 
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
@@ -629,7 +628,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 ));
             };
 
-            let cc = compute_ctx_ctx(e, &u1, e1, &[e2], ctx)?;
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if cc.vars().contains(&x.val) {
                 Err(TypeError::Shadowing(e.clone(), x.clone()))?
@@ -659,11 +658,10 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             let u2 = u2.remove(&x).remove(&y);
 
-            check_split_alg_gen(e, &u1, &u2, e1, &[e2], ctx, &c1, &cc)?;
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
-        Expr::LetDecl(x, t, cs, e2) => todo!(),
         Expr::CaseSum(e1, cs) => {
             let fvs1 = e1.free_vars();
 
@@ -683,7 +681,8 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             check_variant_label_eq(e, &t1, &ls, &tls)?;
 
             let e2s = cs.iter().map(|(_l, _x, e)| e).collect::<Vec<_>>();
-            let cc = compute_ctx_ctx(e, &u1, e1, &e2s, ctx)?;
+            let fvs2 = union(e2s.iter().map(|e| e.free_vars()));
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             let xs = cs.iter().map(|(_l, x, _e)| x).collect::<Vec<_>>();
             for x in xs {
@@ -730,17 +729,18 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             }
             let (t2, u2, p2) = out.unwrap();
 
-            check_split_alg_gen(e, &u1, &u2, e1, &e2s, ctx, &c1, &cc)?;
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::If(e1, e2, e3) => {
             let fvs1 = e1.free_vars();
+            let fvs2 = union([e2.free_vars(), e3.free_vars()]);
 
             let c1 = ctx.restrict(&fvs1);
             let (u1, p1) = check(&c1, e1, &fake_span(Type::Bool))?;
 
-            let cc = compute_ctx_ctx(e, &u1, e1, &[e2, e3], ctx)?;
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if !cc.is_left() && p1 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
@@ -763,7 +763,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             }
             check_rep_eq(&e, &u2, &u3)?;
 
-            check_split_alg_gen(e, &u1, &u2, e1, &[e2, e3], ctx, &c1, &cc)?;
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, Eff::lub(p2, p3))))
         }
@@ -806,7 +806,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c2 = ctx.restrict(&fvs2).split_off(&u1);
             let (u2, _p2) = check(&c2, e2, &t2)?;
 
-            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, JoinOrd::Unordered)?;
+            check_split_alg(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &c2, JoinOrd::Unordered)?;
 
             Ok((fake_span(Type::Unit), u1.join(&u2), Eff::Yes))
         }
@@ -966,62 +966,96 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 }
             };
 
-            check_split_alg(e, &u1, &u2, e1, e2, ctx, &c1, &c2, JoinOrd::Ordered)?;
+            check_split_alg(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &c2, JoinOrd::Ordered)?;
 
             Ok((fake_span(t), u1.join(&u2), Eff::lub(p1, p2)))
         }
+        Expr::LetDecl(x, t, cs, e2) => {
+            let c: &SClause = if cs.len() == 1 {
+                cs.first().unwrap()
+            } else {
+                return Err(TypeError::MultipleClauses(e.clone()));
+            };
+            if c.id.val != x.val {
+                Err(TypeError::ClauseWithWrongId(
+                    e.clone(),
+                    c.id.clone(),
+                    x.clone(),
+                ))?
+            }
+
+            let (arg_tys, ret_ty, ret_eff) = split_arrow_type(t);
+            let ret_eff = if let Some(ret_eff) = ret_eff {
+                ret_eff
+            } else {
+                Err(TypeError::ClauseWithZeroPatterns(e.clone()))?
+            };
+            if c.pats.len() != arg_tys.len() {
+                Err(TypeError::NotEnoughPatterns(e.clone()))?
+            }
+
+            let fvs1 = c.free_vars();
+            let c1 = ctx.restrict(&fvs1);
+            let mut ctx_body = c1.clone();
+            for (pat, (arg_ty, m)) in c.pats.iter().zip(arg_tys) {
+                ctx_body = ext(m.val, ctx_body, check_pattern(pat, &arg_ty)?);
+            }
+            let (mut u1, mut p1) = check(&ctx_body, &c.val.body, &ret_ty)?;
+            if !Eff::leq(p1, ret_eff.val) {
+                Err(TypeError::MismatchEffSub(e.clone(), fake_span(p1), ret_eff))?
+            }
+            for p in &c.pats {
+                for x in p.bound_vars() {
+                    u1 = u1.remove(&x);
+                }
+            }
+            if c.pats.len() != 0 {
+                p1 = Eff::No
+            }
+
+            //let ctx = CtxS::Join(CtxS::Bind(x.clone(), t.clone()), ctx, JoinOrd::Ordered);
+            //infer(&ctx, e2);
+            //    }
+
+            let cc = compute_ctx_ctx(e, &u1, &fvs1, &e2.free_vars(), ctx)?;
+
+            if cc.vars().contains(&x.val) {
+                Err(TypeError::Shadowing(e.clone(), x.clone()))?
+            }
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    e.clone(), // TODO
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let c2 = cc.fill(Ctx::Bind(x.clone(), t.clone()));
+            let (t2, u2, p2) = infer(&c2, e2)?;
+
+            // Assert that channel arguments are used up.
+            if_chan_then_used(&e, &t, &u2, &x)?;
+            let u2 = u2.remove(&x);
+
+            check_split_alg_gen(e, &u1, &u2, &fvs1, &e2.free_vars(), ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
+        }
     }
-    //    Expr::LetDecl(x, t, cs, e) => {
-    //        let c = if cs.len() == 1 {
-    //            cs.first_mut().unwrap()
-    //        } else {
-    //            Err(TypeError::MultipleClauses(e_copy.clone()))?
-    //        };
-    //        if c.id.val != x.val {
-    //            Err(TypeError::ClauseWithWrongId(
-    //                e_copy.clone(),
-    //                c.id.clone(),
-    //                x.clone(),
-    //            ))?
-    //        }
-    //        let (arg_tys, ret_ty, ret_eff) = split_arrow_type(t);
-    //        let ret_eff = if let Some(ret_eff) = ret_eff {
-    //            ret_eff
-    //        } else {
-    //            Err(TypeError::ClauseWithZeroPatterns(e_copy.clone()))?
-    //        };
-    //        if c.pats.len() != arg_tys.len() {
-    //            Err(TypeError::NotEnoughPatterns(e_copy.clone()))?
-    //        }
-    //        let mut ctx_body = ctx.clone();
-    //        for (pat, (arg_ty, m)) in c.pats.iter().zip(arg_tys) {
-    //            ctx_body = ext(m.val, ctx_body, check_pattern(pat, &arg_ty)?);
-    //        }
-    //        let eff = check(&ctx_body, &mut c.val.body, &ret_ty)?;
-    //        if !Eff::leq(eff, ret_eff.val) {
-    //            Err(TypeError::MismatchEffSub(
-    //                e_copy.clone(),
-    //                fake_span(eff),
-    //                ret_eff,
-    //            ))?
-    //        }
-    //        let ctx = CtxS::Join(CtxS::Bind(x.clone(), t.clone()), ctx, JoinOrd::Ordered);
-    //        infer(&ctx, e)
-    //    }
-    //}
 }
 
-//pub fn check_pattern(pat: &SPattern, t: &SType) -> Result<Ctx, TypeError> {
-//    match (&pat.val, &t.val) {
-//        (Pattern::Var(x), _) => Ok(Ctx::Bind(x.clone(), t.clone())),
-//        (Pattern::Pair(pat1, pat2), Type::Prod(m, t1, t2)) => {
-//            let c1 = check_pattern(pat1, t1)?;
-//            let c2 = check_pattern(pat2, t2)?;
-//            Ok(ext(m.val, c1, c2))
-//        }
-//        (Pattern::Pair(pat1, pat2), _) => Err(TypeError::PatternMismatch(pat.clone(), t.clone())),
-//    }
-//}
+pub fn check_pattern(pat: &SPattern, t: &SType) -> Result<Ctx, TypeError> {
+    match (&pat.val, &t.val) {
+        (Pattern::Var(x), _) => Ok(Ctx::Bind(x.clone(), t.clone())),
+        (Pattern::Pair(pat1, pat2), Type::Prod(m, t1, t2)) => {
+            let c1 = check_pattern(pat1, t1)?;
+            let c2 = check_pattern(pat2, t2)?;
+            Ok(ext(m.val, c1, c2))
+        }
+        (Pattern::Pair(pat1, pat2), _) => Err(TypeError::PatternMismatch(pat.clone(), t.clone())),
+    }
+}
 
 pub fn split_arrow_type(mut t: &SType) -> (Vec<(SType, SMult)>, SType, Option<SEff>) {
     let mut args = vec![];

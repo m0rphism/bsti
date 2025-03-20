@@ -362,7 +362,6 @@ impl Pretty<UserState> for Pattern {
                 p.pp(p2);
                 p.pp(")");
             }
-            Pattern::Inj(sum_label, spanned) => todo!(),
         }
     }
 }
