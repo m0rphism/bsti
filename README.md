@@ -153,8 +153,8 @@ The following shows the obligatory math server example:
 ```
 let 
   server = \c.
-    let x = recv (&c : Chan (?Int.return)) in
-    let y = recv (&c : Chan (?Int.return)) in
+    let x = recv &c in
+    let y = recv &c in
     send (x + y) &c;
     wait c
   : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
@@ -164,7 +164,7 @@ let
   client = \c.
     send 1 &c;
     send 2 &c;
-    print (recv (&c : Chan (?Int.return)));
+    print (recv &c);
     term c
   : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
 in
@@ -180,8 +180,8 @@ This example can also be written alternative with the "let-declaration" syntax:
 let 
   server : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
   server c =
-    let x = recv (&c : Chan (?Int.return)) in
-    let y = recv (&c : Chan (?Int.return)) in
+    let x = recv &c in
+    let y = recv &c in
     send (x + y) &c;
     wait c
 in
@@ -191,7 +191,7 @@ let
   client c =
     send 1 &c;
     send 2 &c;
-    print (recv (&c : Chan (?Int.return)));
+    print (recv &c);
     term c
 in
 
