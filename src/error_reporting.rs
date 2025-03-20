@@ -560,8 +560,9 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!(
-                            "This expression uses variable '{}' recursively, but the type of the variable is not an unrestricted function type.",
-                            x.val
+                            "This expression uses variable '{}' recursively, but '{}' does not have an unrestricted function type.",
+                            x.val,
+                            x.val,
                         ),
                     )],
                 );

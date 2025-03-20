@@ -163,17 +163,6 @@ pub enum Expr {
     Seq(Box<SExpr>, Box<SExpr>),
     Op1(Op1, Box<SExpr>),
     Op2(Op2, Box<SExpr>, Box<SExpr>),
-    // Int(i64),
-    // Float(f64),
-    // String(String),
-    // Bool(bool),
-    // List(Vec<Expr>),
-    // None,
-    // ListAccess(Box<Expr>, Box<Expr>),
-    // Binop(Binop, Box<Expr>, Box<Expr>),
-    // Unop(Unop, Box<Expr>),
-    // Scope(Program),
-    // Loc(Loc),
 }
 pub type SExpr = Spanned<Expr>;
 
