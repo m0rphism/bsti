@@ -237,7 +237,7 @@ impl Pretty<UserState> for Expr {
                 p.pp(", ");
                 p.pp(y);
                 p.pp(" = ");
-                p.pp(e1);
+                p.pp_prec(0, e1);
                 p.pp(" in ");
                 p.pp(e2);
             }),
@@ -245,9 +245,17 @@ impl Pretty<UserState> for Expr {
                 p.pp("let ");
                 p.pp(x);
                 p.pp(" = ");
-                p.pp(e1);
+                p.pp_prec(0, e1);
                 p.pp(" in ");
                 p.pp(e2);
+            }),
+            Expr::If(e1, e2, e3) => p.infix(1, R, |p| {
+                p.pp("if ");
+                p.pp_prec(0, e1);
+                p.pp(" then ");
+                p.pp_prec(0, e2);
+                p.pp(" else ");
+                p.pp_arg(R, e3);
             }),
             Expr::CaseSum(e, cs) => p.infix(1, R, |p| {
                 p.pp("case ");

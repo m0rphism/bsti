@@ -154,6 +154,8 @@ peg::parser! {
               { Expr::Let(x, Box::new(e1), Box::new(e2)) }
             / tok(Let) x:sid() tok(Colon) t:stype() cs:sclause()* tok(In) e:sexpr_lam()
               { Expr::LetDecl(x, t, cs, Box::new(e)) }
+            / tok(If) e:sexpr_lam() tok(Then) e1:sexpr_lam() tok(Else) e2:sexpr_lam()
+              { Expr::If(Box::new(e), Box::new(e1), Box::new(e2)) }
             / e:expr_seq() { e }
         pub rule sexpr_lam() -> SExpr = spanned(<expr_lam()>)
 

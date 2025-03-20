@@ -1,4 +1,9 @@
-print (str "foo")
+if 1 == 2 then
+  print "foo"
+else
+  print "bar"
+
+#print ("foo" + str 42)
 
 # 2 + 3 * 4 == -5 && false || ! true
 

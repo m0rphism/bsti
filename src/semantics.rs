@@ -426,6 +426,17 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             };
             Ok(Value::Const(c))
         }
+        Expr::If(e1, e2, e3) => {
+            let v1 = eval_(env, e1)?;
+            let Value::Const(Const::Bool(b)) = &v1 else {
+                return Err(EvalError::ValMismatch(
+                    e.clone(),
+                    format!("bool"), // TODO
+                    v1.clone(),
+                ));
+            };
+            eval_(env, if *b { e2 } else { e3 })
+        }
     }
 }
 

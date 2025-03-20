@@ -144,6 +144,7 @@ pub enum Expr {
 
     Inj(SSumLabel, Box<SExpr>),
     CaseSum(Box<SExpr>, Vec<(SSumLabel, SId, SExpr)>),
+    If(Box<SExpr>, Box<SExpr>, Box<SExpr>),
 
     Fork(Box<SExpr>),
     New(SSessionO),
@@ -322,6 +323,7 @@ impl Expr {
             Expr::End(_l, e) => e.free_vars(),
             Expr::Op1(_op1, e) => e.free_vars(),
             Expr::Op2(_op2, e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::If(e, e1, e2) => union(e.free_vars(), union(e1.free_vars(), e2.free_vars())),
         }
     }
 }

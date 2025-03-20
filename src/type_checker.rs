@@ -734,6 +734,39 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
+        Expr::If(e1, e2, e3) => {
+            let fvs1 = e1.free_vars();
+
+            let c1 = ctx.restrict(&fvs1);
+            let (u1, p1) = check(&c1, e1, &fake_span(Type::Bool))?;
+
+            let cc = compute_ctx_ctx(e, &u1, e1, &[e2, e3], ctx)?;
+
+            if !cc.is_left() && p1 == Eff::Yes {
+                return Err(TypeError::MismatchEff(
+                    *e1.clone(),
+                    fake_span(Eff::No),
+                    fake_span(Eff::Yes),
+                ));
+            }
+
+            let c2 = cc.fill(Ctx::Empty);
+            let (t2, u2, p2) = infer(&c2, e2)?;
+            let (t3, u3, p3) = infer(&c2, e3)?;
+
+            if t2 != t3 {
+                return Err(TypeError::CaseClauseTypeMismatch(
+                    e.clone(),
+                    t2.clone(),
+                    t3.clone(),
+                ));
+            }
+            check_rep_eq(&e, &u2, &u3)?;
+
+            check_split_alg_gen(e, &u1, &u2, e1, &[e2, e3], ctx, &c1, &cc)?;
+
+            Ok((t2, u1.join(&u2), Eff::lub(p1, Eff::lub(p2, p3))))
+        }
         Expr::Fork(e1) => {
             let (t, u, _p) = infer(ctx, e1)?;
             let Type::Unit = t.val else {
