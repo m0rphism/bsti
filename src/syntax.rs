@@ -304,7 +304,6 @@ impl Session {
     }
     pub fn split(&self, s1: &Session) -> Option<Self> {
         let r = self.split_(s1, &mut HashSet::new()).ok()?;
-        println!("=========== {:?}", r);
         // TODO
         r
     }
