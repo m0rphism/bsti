@@ -1098,7 +1098,24 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             };
             todo!()
         }
-        Expr::Offer(e1) => todo!(),
+        Expr::Offer(e1) => {
+            let (t1, u1, p1) = infer(ctx, e1)?;
+            let err = Err(TypeError::Mismatch(
+                *e1.clone(),
+                Err(format!("Chan &{{...}}")),
+                t1.clone(),
+            ));
+            let Type::Chan(s) = &t1.val else {
+                return err;
+            };
+            if !s.is_borrowed() {
+                return err;
+            }
+            let Session::Choice(SessionOp::Recv, cs) = &s.val else {
+                return err;
+            };
+            todo!()
+        }
     }
 }
 

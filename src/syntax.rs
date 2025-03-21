@@ -30,7 +30,7 @@ pub enum SessionOp {
 }
 pub type SSessionOp = Spanned<SessionOp>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Session {
     Var(SId),
     Mu(SId, Box<SSession>),
@@ -174,6 +174,78 @@ impl SessionOp {
 }
 
 impl Session {
+    fn subst(&self, x: &Id, other: &Self) -> Self {
+        todo!()
+    }
+    fn unfold(&self, x: &Id) -> Self {
+        todo!()
+    }
+    fn sem_eq_(&self, other: &Self, seen: &mut HashSet<(Session, Session)>) -> bool {
+        if !seen.insert((self.clone(), other.clone())) {
+            return true;
+        } else {
+            match (self, other) {
+                (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2)) => {
+                    op1 == op2 && t1.sem_eq(t2) && s1.sem_eq_(s2, seen)
+                }
+                (Session::End(op1), Session::End(op2)) => op1 == op2,
+                (Session::Return, Session::Return) => true,
+                (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) => {
+                    let cs: Vec<(Label, Session, Session)> = todo!();
+                    cs.iter().all(|(_, s1, s2)| s1.sem_eq_(s2, seen))
+                }
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1.val).sem_eq_(other, seen),
+                (_, Session::Mu(x2, s2)) => self.sem_eq_(&s2.unfold(&x2.val), seen),
+                (Session::Var(_x1), _) => unreachable!(),
+                (_, Session::Var(_x2)) => unreachable!(),
+                _ => false,
+            }
+        }
+    }
+    pub fn sem_eq(&self, other: &Self) -> bool {
+        self.sem_eq_(other, &mut HashSet::new())
+    }
+    fn split_(
+        &self,
+        p: &Session,
+        seen: &mut HashSet<(Session, Session)>,
+    ) -> Result<Option<Self>, ()> {
+        if !seen.insert((self.clone(), p.clone())) {
+            Ok(None)
+        } else {
+            match (self, p) {
+                (_, Session::End(op2)) => Err(()),
+                (_, Session::Return) => Ok(Some(self.clone())),
+                (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2))
+                    if op1 == op2 && t1.sem_eq(t2) =>
+                {
+                    s1.split_(s2, seen)
+                }
+                (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) if op1 == op2 => {
+                    let cs: Vec<(Label, Session, Session)> = todo!();
+                    let cs2 = cs
+                        .iter()
+                        .map(|(_, s1, s2)| s1.split_(s2, seen))
+                        .collect::<Result<Vec<_>, ()>>()?;
+                    let mut it = cs2.into_iter().flatten();
+                    if let Some(r) = it.next() {
+                        if it.all(|r2| r.sem_eq(&r2)) {
+                            Ok(Some(r))
+                        } else {
+                            Err(())
+                        }
+                    } else {
+                        Ok(None)
+                    }
+                }
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1.val).split_(p, seen),
+                (_, Session::Mu(x2, s2)) => self.split_(&s2.unfold(&x2.val), seen),
+                (Session::Var(_x1), _) => unreachable!(),
+                (_, Session::Var(_x2)) => unreachable!(),
+                _ => Err(()),
+            }
+        }
+    }
     pub fn split(&self, s1: &Session) -> Option<Self> {
         match (self, s1) {
             (_, Session::Return) => Some(self.clone()),
@@ -302,32 +374,17 @@ impl Pattern {
     }
 }
 
-impl PartialEq for Session {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2)) => {
-                op1 == op2 && t1.eq(t2) && s1.eq(s2)
-            }
-            (Session::End(op1), Session::End(op2)) => op1 == op2,
-            (Session::Return, Session::Return) => true,
-            (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) => {
-                todo!()
-            }
-            (Session::Mu(x1, s1), Session::Mu(x2, s2)) => todo!(),
-            (Session::Var(x1), Session::Var(x2)) => todo!(),
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Session {}
-
-// Inefficient but correct for the custom equality
-impl Hash for Session {
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
-}
+//impl Eq for Session {}
+//
+//// Inefficient but correct for the custom equality
+//impl Hash for Session {
+//    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
+//}
 
 impl Type {
+    pub fn sem_eq(&self, other: &Self) -> bool {
+        todo!()
+    }
     pub fn is_unr(&self) -> bool {
         match self {
             Type::Chan(_) => false,
