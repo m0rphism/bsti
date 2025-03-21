@@ -1,8 +1,5 @@
 use crate::{
-    syntax::{
-        Clause, Const, Eff, Expr, Mult, Op1, Op2, Pattern, SMult, Session, SessionB, SessionO,
-        SessionOp, Type,
-    },
+    syntax::{Clause, Const, Eff, Expr, Mult, Op1, Op2, Pattern, SMult, Session, SessionOp, Type},
     util::{
         pretty::{Assoc, Pretty, PrettyEnv},
         span::Spanned,
@@ -79,16 +76,7 @@ impl Pretty<UserState> for Type {
 impl Pretty<UserState> for Session {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
-            Session::Owned(s) => p.pp(s),
-            Session::Borrowed(s) => p.pp(s),
-        }
-    }
-}
-
-impl Pretty<UserState> for SessionO {
-    fn pp(&self, p: &mut PrettyEnv<UserState>) {
-        match self {
-            SessionO::Op(op, t, s) => p.infix(0, R, |p| {
+            Session::Op(op, t, s) => p.infix(0, R, |p| {
                 match op {
                     SessionOp::Send => p.pp("!"),
                     SessionOp::Recv => p.pp("?"),
@@ -97,27 +85,31 @@ impl Pretty<UserState> for SessionO {
                 p.pp(". ");
                 p.pp(s);
             }),
-            SessionO::End(op) => match op {
+            Session::End(op) => match op {
                 SessionOp::Send => p.pp("term"),
                 SessionOp::Recv => p.pp("wait"),
             },
-        }
-    }
-}
-
-impl Pretty<UserState> for SessionB {
-    fn pp(&self, p: &mut PrettyEnv<UserState>) {
-        match self {
-            SessionB::Op(op, t, s) => p.infix(0, R, |p| {
-                match op {
-                    SessionOp::Send => p.pp("!"),
-                    SessionOp::Recv => p.pp("?"),
-                }
-                p.pp_prec(10, t);
+            Session::Var(x) => p.pp(&x.val),
+            Session::Mu(x, s) => p.infix(0, R, |p| {
+                p.pp("µ ");
+                p.pp(x);
                 p.pp(". ");
-                p.pp(s);
+                p.pp_arg(R, s);
             }),
-            SessionB::Return => p.pp("return"),
+            Session::Choice(op, cs) => {
+                match op {
+                    SessionOp::Send => p.pp("+"),
+                    SessionOp::Recv => p.pp("&"),
+                }
+                p.pp("{");
+                for (l, s) in cs {
+                    p.pp(l);
+                    p.pp(": ");
+                    p.pp_prec(0, s);
+                }
+                p.pp("}");
+            }
+            Session::Return => p.pp("return"),
         }
     }
 }
@@ -170,9 +162,8 @@ impl Pretty<UserState> for Expr {
     fn pp(&self, p: &mut PrettyEnv<UserState>) {
         match self {
             Expr::New(r) => p.infix(3, L, |p| {
-                p.pp("new {");
-                p.pp_prec(0, r);
-                p.pp("}")
+                p.pp("new ");
+                p.pp_prec(3, r);
             }),
             Expr::Drop(e) => p.infix(2, L, |p| {
                 p.pp("drop ");
@@ -333,6 +324,16 @@ impl Pretty<UserState> for Expr {
                     p.pp_arg(R, e2);
                 })
             }
+            Expr::Select(l, e) => p.infix(10, L, |p| {
+                p.pp("select ");
+                p.pp_arg(L, l);
+                p.pp(" ");
+                p.pp_arg(R, e);
+            }),
+            Expr::Offer(e) => p.infix(10, L, |p| {
+                p.pp("offer ");
+                p.pp_arg(R, e);
+            }),
         }
     }
 }

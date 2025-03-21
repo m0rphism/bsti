@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     fresh_var::fresh_var,
-    syntax::{Const, Expr, Id, Op1, Op2, Pattern, SExpr, SId, SPattern, SessionOp, SumLabel},
+    syntax::{Const, Expr, Id, Label, Op1, Op2, Pattern, SExpr, SId, SPattern, SessionOp},
     util::{
         pretty::{pretty_def, Assoc, Pretty},
         span::fake_span,
@@ -68,7 +68,7 @@ pub enum Value {
     AbsRec(SId, Env, SId, SExpr),
     Const(Const),
     Pair(Box<Value>, Box<Value>),
-    Inj(SumLabel, Box<Value>),
+    Inj(Label, Box<Value>),
     Chan(Chan),
 }
 
@@ -479,6 +479,8 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             let env = env.ext(x.val.clone(), v1);
             eval_(&env, &e2)
         }
+        Expr::Select(spanned, spanned1) => todo!(),
+        Expr::Offer(spanned) => todo!(),
     }
 }
 

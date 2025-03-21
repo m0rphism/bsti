@@ -4,8 +4,8 @@ use crate::{
     ren::Ren,
     rep::Rep,
     syntax::{
-        Eff, Expr, Id, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SMult, SPattern,
-        SSession, SSessionB, SType, Session, SessionB, SessionO, SessionOp, SumLabel, Type,
+        Eff, Expr, Id, Label, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SMult, SPattern,
+        SSession, SType, Session, SessionOp, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::{pretty::pretty_def, span::fake_span},
@@ -18,12 +18,12 @@ pub enum TypeError {
     MismatchMult(SExpr, SType, Result<SMult, String>, SMult),
     MismatchEff(SExpr, SEff, SEff),
     MismatchEffSub(SExpr, SEff, SEff),
-    MismatchLabel(SExpr, SumLabel, SType),
+    MismatchLabel(SExpr, Label, SType),
     Op2Mismatch(SExpr, Result<SType, String>, SType, SType),
     TypeAnnotationMissing(SExpr),
     //ClosedUnfinished(SExpr, SRegex),
     //InvalidWrite(SExpr, SRegex, SRegex),
-    InvalidSplit(SExpr, SSession, SSessionB),
+    InvalidSplit(SExpr, SSession, SSession),
     //InvalidSplitArg(SRegex),
     //InvalidSplitRes(SExpr, SRegex, SRegex, SRegex),
     CtxSplitFailed(SExpr, Ctx, Ctx),
@@ -38,13 +38,13 @@ pub enum TypeError {
     PatternMismatch(SPattern, SType),
     ClauseWithWrongId(SExpr, SId, SId),
     ClauseWithZeroPatterns(SExpr),
-    CaseMissingLabel(SExpr, SType, SumLabel),
-    CaseExtraLabel(SExpr, SType, SumLabel),
-    CaseDuplicateLabel(SExpr, SType, SumLabel),
+    CaseMissingLabel(SExpr, SType, Label),
+    CaseExtraLabel(SExpr, SType, Label),
+    CaseDuplicateLabel(SExpr, SType, Label),
     CaseClauseTypeMismatch(SExpr, SType, SType),
     CaseLeftOverMismatch(SExpr, Id, Session, Option<Session>),
     VariantEmpty(SExpr),
-    VariantDuplicateLabel(SExpr, SType, SumLabel),
+    VariantDuplicateLabel(SExpr, SType, Label),
     RecursiveNonFunctionBinding(SExpr, SId),
 }
 
@@ -75,11 +75,13 @@ pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), T
     }
 }
 
-pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, SessionB> {
+pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, Session> {
     let mut sis = HashMap::new();
     for x in fvs {
-        if let Some(Session::Borrowed(s)) = u.map.get(x) {
-            sis.insert(x.clone(), s.val.clone());
+        if let Some(s) = u.map.get(x) {
+            if s.is_borrowed() {
+                sis.insert(x.clone(), s.clone());
+            }
         }
     }
     sis
@@ -195,8 +197,8 @@ pub fn compute_ctx_ctx(
 pub fn check_variant_label_eq(
     e: &SExpr,
     t: &SType,
-    actual: &[&SumLabel],
-    expected: &[&SumLabel],
+    actual: &[&Label],
+    expected: &[&Label],
 ) -> Result<(), TypeError> {
     if actual.len() == 0 {
         return Err(TypeError::VariantEmpty(e.clone()));
@@ -317,20 +319,11 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
         Expr::Borrow(x) => {
             // Assert that `t` is a borrowed session type
             let s1 = match &t.val {
-                Type::Chan(s) => match &s.val {
-                    Session::Borrowed(s) => s,
-                    _ => {
-                        return Err(TypeError::Mismatch(
-                            e.clone(),
-                            Err("Chan with borrowed session type".to_owned()),
-                            t.clone(),
-                        ))
-                    }
-                },
+                Type::Chan(s) if s.is_borrowed() => s,
                 _ => {
                     return Err(TypeError::Mismatch(
                         e.clone(),
-                        Err("Chan".to_owned()),
+                        Err("Chan with borrowed session type".to_owned()),
                         t.clone(),
                     ))
                 }
@@ -357,7 +350,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
             };
             // Assert that the `s % s1` is defined
             if let Some(_s2) = s.split(s1) {
-                let u = Rep::single(x.val.clone(), Session::Borrowed(s1.clone()));
+                let u = Rep::single(x.val.clone(), s1.val.clone());
                 Ok((u, Eff::No))
             } else {
                 Err(TypeError::InvalidSplit(e.clone(), s.clone(), s1.clone()))
@@ -419,20 +412,10 @@ pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeErr
                 return err;
             };
             let t = match s.val {
-                Session::Owned(s) => match s.val {
-                    SessionO::Op(SessionOp::Recv, t, _s) => t,
-                    _ => return err,
-                },
-                Session::Borrowed(s) => match s.val {
-                    SessionB::Op(SessionOp::Recv, t, _s) => t,
-                    _ => return err,
-                },
+                Session::Op(SessionOp::Recv, t, _s) => t,
+                _ => return err,
             };
-            let s1 = Session::Borrowed(fake_span(SessionB::Op(
-                SessionOp::Recv,
-                t,
-                Box::new(fake_span(SessionB::Return)),
-            )));
+            let s1 = Session::Op(SessionOp::Recv, t, Box::new(fake_span(Session::Return)));
             let u = Rep::single(x.val.clone(), s1.clone());
             Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
         }
@@ -823,12 +806,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         }
         Expr::New(s) => {
             assert_unr_ctx(&e, &ctx)?;
+            if !s.is_owned() {
+                // TODO
+            }
             let t = fake_span(Type::Prod(
                 fake_span(Mult::OrdL),
-                Box::new(fake_span(Type::Chan(fake_span(Session::Owned(s.clone()))))),
-                Box::new(fake_span(Type::Chan(fake_span(Session::Owned(fake_span(
-                    s.dual(),
-                )))))),
+                Box::new(fake_span(Type::Chan(s.clone()))),
+                Box::new(fake_span(Type::Chan(fake_span(s.dual())))),
             ));
             Ok((t, Rep::empty(), Eff::No))
         }
@@ -837,13 +821,11 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, _p1) = infer(&c1, e1)?;
 
-            let t2 = fake_span(Type::Chan(fake_span(Session::Borrowed(fake_span(
-                SessionB::Op(
-                    SessionOp::Send,
-                    Box::new(t1.clone()),
-                    Box::new(fake_span(SessionB::Return)),
-                ),
-            )))));
+            let t2 = fake_span(Type::Chan(fake_span(Session::Op(
+                SessionOp::Send,
+                Box::new(t1.clone()),
+                Box::new(fake_span(Session::Return)),
+            ))));
 
             let fvs2 = e2.free_vars();
             let c2 = ctx.restrict(&fvs2).split_off(&u1);
@@ -864,13 +846,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let Type::Chan(s) = t.val else {
                 return err;
             };
-            let Session::Borrowed(s) = s.val else {
+            if !s.is_borrowed() {
+                return err;
+            }
+            let Session::Op(SessionOp::Recv, t, s) = s.val else {
                 return err;
             };
-            let SessionB::Op(SessionOp::Recv, t, s) = s.val else {
-                return err;
-            };
-            let SessionB::Return = s.val else {
+            let Session::Return = s.val else {
                 return err;
             };
 
@@ -887,10 +869,10 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let Type::Chan(s) = t.val else {
                 return err;
             };
-            let Session::Borrowed(s) = s.val else {
+            if !s.is_borrowed() {
                 return err;
-            };
-            let SessionB::Return = s.val else {
+            }
+            let Session::Return = s.val else {
                 return err;
             };
 
@@ -911,10 +893,10 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let Type::Chan(s) = t.val else {
                 return err;
             };
-            let Session::Owned(s) = s.val else {
+            if !s.is_owned() {
                 return err;
-            };
-            if s.val != SessionO::End(*op) {
+            }
+            if s.val != Session::End(*op) {
                 return err;
             }
 
@@ -1095,6 +1077,28 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
+        Expr::Select(l, e1) => {
+            let (t1, u1, p1) = infer(ctx, e1)?;
+            let err = Err(TypeError::Mismatch(
+                *e1.clone(),
+                Err(format!("Chan +{{...}}")),
+                t1.clone(),
+            ));
+            let Type::Chan(s) = &t1.val else {
+                return err;
+            };
+            if !s.is_borrowed() {
+                return err;
+            }
+            let Session::Choice(SessionOp::Send, cs) = &s.val else {
+                return err;
+            };
+            let Some((_, s)) = cs.iter().find(|(l2, _)| *l == *l2) else {
+                return err; // TODO
+            };
+            todo!()
+        }
+        Expr::Offer(e1) => todo!(),
     }
 }
 

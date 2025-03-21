@@ -73,29 +73,23 @@ peg::parser! {
 
         // Types
 
-        pub rule session_o() -> SessionO
-            = tok(Wait) { SessionO::End(SessionOp::Recv) }
-            / tok(Term) { SessionO::End(SessionOp::Send) }
-            / tok(Bang) t:stype_atom() tok(Period) s:ssession_o() 
-              { SessionO::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
-            / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_o() 
-              { SessionO::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
-            / tok(ParenL) s:session_o() tok(ParenR) { s }
-        pub rule ssession_o() -> SSessionO = spanned(<session_o()>)
-
-        pub rule session_b() -> SessionB
-            = tok(Return) { SessionB::Return }
-            / tok(Bang) t:stype_atom() tok(Period) s:ssession_b() 
-              { SessionB::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
-            / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession_b() 
-              { SessionB::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
-            / tok(ParenL) s:session_b() tok(ParenR) { s }
-        pub rule ssession_b() -> SSessionB = spanned(<session_b()>)
-
-        #[cache]
         pub rule session() -> Session
-            = s:ssession_o() { Session::Owned(s) }
-            / s:ssession_b() { Session::Borrowed(s) }
+            = tok(Return) { Session::Return }
+            / tok(Wait) { Session::End(SessionOp::Recv) }
+            / tok(Term) { Session::End(SessionOp::Send) }
+            / tok(Bang) t:stype_atom() tok(Period) s:ssession() 
+              { Session::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
+            / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession() 
+              { Session::Op(SessionOp::Recv, Box::new(t), Box::new(s)) }
+            / tok(Amp) tok(BraceL) cs:((l:sid() tok(Colon) s:ssession() { (l, s) })** tok(Comma)) tok(Comma)? tok(BraceR)
+              { Session::Choice(SessionOp::Recv, cs) }
+            / tok(Plus) tok(BraceL) cs:((l:sid() tok(Colon) s:ssession() { (l, s) })** tok(Comma)) tok(Comma)? tok(BraceR)
+              { Session::Choice(SessionOp::Send, cs) }
+            / tok(Mu) x:sid() tok(Period) s:ssession()
+              { Session::Mu(x, Box::new(s)) }
+            / x:sid()
+              { Session::Var(x) }
+            / tok(ParenL) s:session() tok(ParenR) { s }
         pub rule ssession() -> SSession = spanned(<session()>)
 
         pub rule type_() -> Type = t:type_arrow() { t }
@@ -221,7 +215,7 @@ peg::parser! {
 
         #[cache_left_rec]
         pub rule expr_app() -> Expr
-            = tok(New) s:ssession_o() { Expr::New(s) }
+            = tok(New) s:ssession() { Expr::New(s) }
             / tok(Send) e1:sexpr_atom() e2:sexpr_atom() { Expr::Send(Box::new(e1), Box::new(e2)) }
             / tok(Recv) e:sexpr_atom() { Expr::Recv(Box::new(e)) }
             / tok(Drop) e:sexpr_atom() { Expr::Drop(Box::new(e)) }

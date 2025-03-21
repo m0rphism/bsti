@@ -102,6 +102,8 @@ pub enum Token<'a> {
     Inj,
     #[regex("fork|spawn")]
     Fork,
+    #[regex("µ|mu")]
+    Mu,
 
     // Operators
     #[token(";")]
@@ -299,6 +301,7 @@ impl<'a> Token<'a> {
             Token::IntT => "Int",
             Token::BoolT => "Bool",
             Token::StringT => "String",
+            Token::Mu => "µ",
         }
     }
 }

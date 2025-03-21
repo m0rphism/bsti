@@ -4,16 +4,21 @@
 
 
 
+let x = new (µ x. ?Int.x)
+in x
 
-let
-  fac : Int -[ l 0 ]→ Int
-  fac x =
-    if x == 0 then
-      1
-    else
-      x * fac (x - 1)
-in
-  fac 5
+# let x = new (!Int.+{ x: ?Int.wait, y: !Int.wait })
+# in x
+
+# let
+#   fac : Int -[ u 0 ]→ Int
+#   fac x =
+#     if x == 0 then
+#       1
+#     else
+#       x * fac (x - 1)
+# in
+#   fac 5
 
 # let 
 #   x : Unit

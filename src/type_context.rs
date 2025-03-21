@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use crate::ren::Ren;
 use crate::rep::Rep;
-use crate::syntax::{Id, Mult, SId, SType, Session, SessionB, SessionO, SessionOp, Type};
+use crate::syntax::{Id, Mult, SId, SType, Session, SessionOp, Type};
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
 use crate::util::pretty::{pretty_def, Pretty, PrettyEnv};
@@ -310,9 +310,11 @@ impl Ctx {
         let mut ctx = self.clone();
         ctx.map_binds_mut(&mut |x: &mut Id, t: &mut Type| {
             if let Type::Chan(s) = &t {
-                if let Some(Session::Borrowed(s1)) = u.map.get(x) {
-                    if let Some(s2) = s.split(&s1) {
-                        *t = Type::Chan(fake_span(s2.clone()));
+                if let Some(s1) = u.map.get(x) {
+                    if s1.is_borrowed() {
+                        if let Some(s2) = s.split(&s1) {
+                            *t = Type::Chan(fake_span(s2.clone()));
+                        }
                     }
                 }
             }
@@ -332,16 +334,15 @@ impl Ctx {
     }
 
     // split-ctx function from Agda
-    pub fn split_ctx(&self, sis: &HashMap<Id, SessionB>, r1: &Ren, r2: &Ren) -> Ctx {
+    pub fn split_ctx(&self, sis: &HashMap<Id, Session>, r1: &Ren, r2: &Ren) -> Ctx {
         self.flatmap_binds(&mut |x, t| {
             if let Some(s1) = sis.get(&x) {
                 if let Type::Chan(s) = &t {
                     if let Some(s2) = s.split(s1) {
-                        let s1 = Session::Borrowed(fake_span(s1.clone()));
                         return Ctx::Join(
                             Box::new(Ctx::Bind(
                                 fake_span(r1.map.get(&x).unwrap().clone()),
-                                fake_span(Type::Chan(fake_span(s1))),
+                                fake_span(Type::Chan(fake_span(s1.clone()))),
                             )),
                             Box::new(Ctx::Bind(
                                 fake_span(r2.map.get(&x).unwrap().clone()),
@@ -718,9 +719,7 @@ pub fn gen_ctx(cats: &[usize], vars: &[Id], i: usize) -> Option<Ctx> {
         // return Some(Ctx::Bind(fake_span(vars[0].clone()), fake_span(Type::Unit)));
         return Some(Ctx::Bind(
             fake_span(vars[0].clone()),
-            fake_span(Type::Chan(fake_span(Session::Owned(fake_span(
-                SessionO::End(SessionOp::Send),
-            ))))),
+            fake_span(Type::Chan(fake_span(Session::End(SessionOp::Send)))),
         ));
     }
     for x in 1..n {
