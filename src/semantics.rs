@@ -332,6 +332,56 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             }
             Ok(v2)
         }
+        Expr::Select(l, e1) => {
+            let v1 = eval_(&env, e1)?;
+            let Value::Chan(c) = v1 else {
+                return Err(EvalError::ValMismatch(
+                    e.clone(),
+                    format!("channel"),
+                    v1.clone(),
+                ));
+            };
+            let c = c.0.lock().unwrap();
+            let cell = c.receiver.recv().unwrap();
+            {
+                let cell = cell.lock().unwrap();
+                cell.sender
+                    .send(Value::Const(Const::String(l.val.clone())))
+                    .unwrap();
+            }
+            if let Some(sender) = &c.sender {
+                sender.send(cell).unwrap();
+            }
+            Ok(Value::Const(Const::Unit))
+        }
+        Expr::Offer(e1) => {
+            let v1 = eval_(&env, e1)?;
+            let Value::Chan(c) = v1 else {
+                return Err(EvalError::ValMismatch(
+                    e.clone(),
+                    format!("channel"),
+                    v1.clone(),
+                ));
+            };
+            let co = c.borrow();
+            let co = co.0.lock().unwrap();
+            let cell = co.receiver.recv().unwrap();
+            let v = {
+                let cell = cell.lock().unwrap();
+                cell.receiver.recv().unwrap()
+            };
+            let Value::Const(Const::String(l)) = v else {
+                return Err(EvalError::ValMismatch(
+                    e.clone(),
+                    format!("label"),
+                    v.clone(),
+                ));
+            };
+            if let Some(sender) = &co.sender {
+                sender.send(cell).unwrap();
+            }
+            Ok(Value::Inj(l, Box::new(Value::Chan(c))))
+        }
         Expr::Drop(e1) => {
             let v1 = eval_(env, e1)?;
             let Value::Chan(c) = v1 else {
@@ -479,8 +529,6 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             let env = env.ext(x.val.clone(), v1);
             eval_(&env, &e2)
         }
-        Expr::Select(spanned, spanned1) => todo!(),
-        Expr::Offer(spanned) => todo!(),
     }
 }
 

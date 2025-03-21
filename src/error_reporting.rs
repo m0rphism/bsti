@@ -541,7 +541,6 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 );
             }
             TypeError::RecursiveNonFunctionBinding(e, x) => {
-                println!("{:?}", e.span);
                 report(
                     &src,
                     e.span.clone(),
@@ -553,6 +552,53 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                             x.val,
                             x.val,
                         ),
+                    )],
+                );
+            }
+            TypeError::WfNonContractive(s, x) => {
+                report(
+                    &src,
+                    s.span.clone(),
+                    "Type Error",
+                    [label(
+                        s.span,
+                        format!(
+                            "This session type is non-contractive in variable '{}'.",
+                            x.val,
+                        ),
+                    )],
+                );
+            }
+            TypeError::WfEmptyChoice(s) => {
+                report(
+                    &src,
+                    s.span.clone(),
+                    "Type Error",
+                    [label(
+                        s.span,
+                        format!("This session type has an empty choice, which is not allowed.",),
+                    )],
+                );
+            }
+            TypeError::WfEmptyVariant(t) => {
+                report(
+                    &src,
+                    t.span.clone(),
+                    "Type Error",
+                    [label(
+                        t.span,
+                        format!("This variant type is empty, which is not allowed.",),
+                    )],
+                );
+            }
+            TypeError::MainReturnsOrd(e, t) => {
+                report(
+                    &src,
+                    e.span.clone(),
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!("Main expression needs to have an unrestricted type, but instead has type '{}'.", pretty_def(t)),
                     )],
                 );
             }

@@ -4,8 +4,8 @@
 
 
 
-let x = new (µ x. ?Int.x)
-in x
+# let x = new (µ x. ?Int.x)
+# in x
 
 # let x = new (!Int.+{ x: ?Int.wait, y: !Int.wait })
 # in x

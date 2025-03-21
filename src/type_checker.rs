@@ -4,8 +4,8 @@ use crate::{
     ren::Ren,
     rep::Rep,
     syntax::{
-        Eff, Expr, Id, Label, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SMult, SPattern,
-        SSession, SType, Session, SessionOp, Type,
+        Eff, Expr, Id, Label, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SLabel, SMult,
+        SPattern, SSession, SType, Session, SessionOp, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
     util::{pretty::pretty_def, span::fake_span},
@@ -46,13 +46,17 @@ pub enum TypeError {
     VariantEmpty(SExpr),
     VariantDuplicateLabel(SExpr, SType, Label),
     RecursiveNonFunctionBinding(SExpr, SId),
+    WfNonContractive(SSession, SId),
+    WfEmptyChoice(SSession),
+    WfEmptyVariant(SType),
+    MainReturnsOrd(SExpr, SType),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
     match &t.val {
         Type::Chan(s) => {
             if let Some(s2) = u.map.get(&x.val) {
-                if **s != *s2 {
+                if !s.sem_eq(s2) {
                     Err(TypeError::LeftOverVar(
                         e.clone(),
                         x.clone(),
@@ -249,7 +253,7 @@ pub fn check_variant_label_eq(
 pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
     for (x, s1) in &u1.map {
         if let Some(s2) = u2.map.get(x) {
-            if !s1.eq(s2) {
+            if !s1.sem_eq(s2) {
                 return Err(TypeError::CaseLeftOverMismatch(
                     e.clone(),
                     x.clone(),
@@ -277,6 +281,69 @@ pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
         }
     }
     Ok(())
+}
+
+fn check_wf_session_(s: &SSession, at_mu: bool) -> Result<(), TypeError> {
+    match &s.val {
+        Session::Var(x) => {
+            if at_mu {
+                Err(TypeError::WfNonContractive(s.clone(), x.clone()))
+            } else {
+                Ok(())
+            }
+        }
+        Session::Mu(_x, s1) => check_wf_session_(s1, true),
+        Session::Op(_op, t1, s1) => {
+            check_wf_type(t1)?;
+            check_wf_session_(s1, false)?;
+            Ok(())
+        }
+        Session::Choice(_op, cs) => {
+            if cs.len() == 0 {
+                Err(TypeError::WfEmptyChoice(s.clone()))
+            } else {
+                for (_l, s1) in cs {
+                    check_wf_session_(s1, at_mu)?;
+                }
+                Ok(())
+            }
+        }
+        Session::End(_op) => Ok(()),
+        Session::Return => Ok(()),
+    }
+}
+
+pub fn check_wf_session(s: &SSession) -> Result<(), TypeError> {
+    check_wf_session_(s, false)
+}
+
+pub fn check_wf_type(t: &SType) -> Result<(), TypeError> {
+    match &t.val {
+        Type::Chan(s) => check_wf_session(s),
+        Type::Arr(_m, _p, t1, t2) => {
+            check_wf_type(t1)?;
+            check_wf_type(t2)?;
+            Ok(())
+        }
+        Type::Prod(_p, t1, t2) => {
+            check_wf_type(t1)?;
+            check_wf_type(t2)?;
+            Ok(())
+        }
+        Type::Variant(cs) => {
+            if cs.len() == 0 {
+                return Err(TypeError::WfEmptyVariant(t.clone()));
+            }
+            for (_l, t) in cs {
+                check_wf_type(t)?;
+            }
+            Ok(())
+        }
+        Type::Unit => Ok(()),
+        Type::Int => Ok(()),
+        Type::Bool => Ok(()),
+        Type::String => Ok(()),
+    }
 }
 
 pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
@@ -381,7 +448,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
         }
         _ => {
             let (t2, u, p) = infer(ctx, e)?;
-            if t.val.eq(&t2.val) {
+            if t.val.sem_eq(&t2.val) {
                 Ok((u, p))
             } else {
                 Err(TypeError::Mismatch(e.clone(), Ok(t.clone()), t2))
@@ -411,11 +478,49 @@ pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeErr
             let Type::Chan(s) = t.val else {
                 return err;
             };
-            let t = match s.val {
+            let t = match s.unfold_if_mu() {
                 Session::Op(SessionOp::Recv, t, _s) => t,
                 _ => return err,
             };
             let s1 = Session::Op(SessionOp::Recv, t, Box::new(fake_span(Session::Return)));
+            let u = Rep::single(x.val.clone(), s1.clone());
+            Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
+        }
+        _ => infer(ctx, e),
+    }
+}
+
+pub fn infer_select_arg(ctx: &Ctx, e: &SExpr, l: &SLabel) -> Result<(SType, Rep, Eff), TypeError> {
+    match &e.val {
+        Expr::Borrow(x) => {
+            // Lookup type of `x`
+            let t = match ctx.lookup_ord_pure(x) {
+                Some((ctx, t)) => {
+                    assert_unr_ctx(e, &ctx)?;
+                    t
+                }
+                None => return Err(TypeError::UndefinedVariable(x.clone())),
+            };
+            // Assert that type of `x` is a channel
+            let err = Err(TypeError::Mismatch(
+                e.clone(),
+                Err(format!("Chan +{{ {}: s, … }}  (for some session s)", l.val)),
+                t.clone(),
+            ));
+            let Type::Chan(s) = t.val else {
+                return err;
+            };
+            let Session::Choice(SessionOp::Send, cs) = s.unfold_if_mu() else {
+                return err;
+            };
+            let Some((_, _s)) = cs.iter().find(|(l2, _)| *l == *l2) else {
+                return err;
+            };
+
+            let s1 = Session::Choice(
+                SessionOp::Send,
+                vec![(l.clone(), fake_span(Session::Return))],
+            );
             let u = Rep::single(x.val.clone(), s1.clone());
             Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
         }
@@ -490,7 +595,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     t1.clone(),
                 ));
             };
-            if !t1.eq(t11) {
+            if !t1.sem_eq(t11) {
                 return Err(TypeError::Mismatch(
                     *e1.clone(),
                     Ok(*t11.clone()),
@@ -806,6 +911,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         }
         Expr::New(s) => {
             assert_unr_ctx(&e, &ctx)?;
+            check_wf_session(s)?;
             if !s.is_owned() {
                 // TODO
             }
@@ -849,7 +955,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if !s.is_borrowed() {
                 return err;
             }
-            let Session::Op(SessionOp::Recv, t, s) = s.val else {
+            let Session::Op(SessionOp::Recv, t, s) = s.unfold_if_mu() else {
                 return err;
             };
             let Session::Return = s.val else {
@@ -872,7 +978,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if !s.is_borrowed() {
                 return err;
             }
-            let Session::Return = s.val else {
+            let Session::Return = s.unfold_if_mu() else {
                 return err;
             };
 
@@ -896,7 +1002,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if !s.is_owned() {
                 return err;
             }
-            if s.val != Session::End(*op) {
+            if s.unfold_if_mu() != Session::End(*op) {
                 return err;
             }
 
@@ -907,6 +1013,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             Ok((fake_span(c.type_()), Rep::empty(), Eff::No))
         }
         Expr::Ann(e, t) => {
+            check_wf_type(t)?;
             let (u, eff) = check(ctx, e, t)?;
             Ok((t.clone(), u, eff))
         }
@@ -971,7 +1078,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     Op2::Eq | Op2::Neq | Op2::Lt | Op2::Le | Op2::Gt | Op2::Ge,
                     t1 @ (Type::Int | Type::Bool | Type::String | Type::Unit),
                     t2,
-                ) if t1 == t2 => Type::Bool,
+                ) if t1.sem_eq(t2) => Type::Bool,
                 (Op2::Eq | Op2::Neq | Op2::Lt | Op2::Le | Op2::Gt | Op2::Ge, _, _) => {
                     return Err(TypeError::Op2Mismatch(
                         e.clone(),
@@ -1078,10 +1185,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             Ok((t2, u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::Select(l, e1) => {
-            let (t1, u1, p1) = infer(ctx, e1)?;
+            let (t1, u1, _p1) = infer_select_arg(ctx, e1, l)?;
             let err = Err(TypeError::Mismatch(
                 *e1.clone(),
-                Err(format!("Chan +{{...}}")),
+                Err(format!(
+                    "Chan +{{ {}: s }}  (for some borrowed session s)",
+                    l.val
+                )),
                 t1.clone(),
             ));
             let Type::Chan(s) = &t1.val else {
@@ -1090,16 +1200,19 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if !s.is_borrowed() {
                 return err;
             }
-            let Session::Choice(SessionOp::Send, cs) = &s.val else {
+            let Session::Choice(SessionOp::Send, cs) = &s.unfold_if_mu() else {
                 return err;
             };
+            if cs.len() != 1 {
+                return err;
+            }
             let Some((_, s)) = cs.iter().find(|(l2, _)| *l == *l2) else {
-                return err; // TODO
+                return err;
             };
-            todo!()
+            Ok((fake_span(Type::Unit), u1, Eff::Yes))
         }
         Expr::Offer(e1) => {
-            let (t1, u1, p1) = infer(ctx, e1)?;
+            let (t1, u1, _p1) = infer(ctx, e1)?;
             let err = Err(TypeError::Mismatch(
                 *e1.clone(),
                 Err(format!("Chan &{{...}}")),
@@ -1108,13 +1221,15 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let Type::Chan(s) = &t1.val else {
                 return err;
             };
-            if !s.is_borrowed() {
-                return err;
-            }
-            let Session::Choice(SessionOp::Recv, cs) = &s.val else {
+            let Session::Choice(SessionOp::Recv, cs) = &s.unfold_if_mu() else {
                 return err;
             };
-            todo!()
+            let cs = cs
+                .iter()
+                .map(|(l, s)| (l.clone(), fake_span(Type::Chan(s.clone()))))
+                .collect();
+            let t = fake_span(Type::Variant(cs));
+            Ok((t, u1, Eff::Yes))
         }
     }
 }
@@ -1127,7 +1242,7 @@ pub fn check_pattern(pat: &SPattern, t: &SType) -> Result<Ctx, TypeError> {
             let c2 = check_pattern(pat2, t2)?;
             Ok(ext(m.val, c1, c2))
         }
-        (Pattern::Pair(pat1, pat2), _) => Err(TypeError::PatternMismatch(pat.clone(), t.clone())),
+        (Pattern::Pair(_pat1, _pat2), _) => Err(TypeError::PatternMismatch(pat.clone(), t.clone())),
     }
 }
 
@@ -1147,7 +1262,10 @@ pub fn split_arrow_type(mut t: &SType) -> (Vec<(SType, SMult)>, SType, Option<SE
 }
 
 pub fn infer_type(e: &mut SExpr) -> Result<(SType, Eff), TypeError> {
-    let (t, u, eff) = infer(&Ctx::Empty, e)?;
+    let (t, _u, eff) = infer(&Ctx::Empty, e)?;
+    if t.is_ord() {
+        return Err(TypeError::MainReturnsOrd(e.clone(), t.clone()));
+    }
     Ok((t, eff))
 }
 

@@ -102,7 +102,10 @@ impl Pretty<UserState> for Session {
                     SessionOp::Recv => p.pp("&"),
                 }
                 p.pp("{");
-                for (l, s) in cs {
+                for (i, (l, s)) in cs.iter().enumerate() {
+                    if i != 0 {
+                        p.pp(", ")
+                    }
                     p.pp(l);
                     p.pp(": ");
                     p.pp_prec(0, s);
@@ -273,6 +276,7 @@ impl Pretty<UserState> for Expr {
                 p.pp_arg(R, e2);
             }),
             Expr::LetDecl(x, t, cs, e) => {
+                p.pp("let ");
                 p.pp(x);
                 p.pp(" : ");
                 p.pp(t);
@@ -281,6 +285,7 @@ impl Pretty<UserState> for Expr {
                     p.pp(c);
                 }
                 p.pp("\n");
+                p.pp("in\n");
                 p.pp(e)
             }
             Expr::Borrow(x) => {

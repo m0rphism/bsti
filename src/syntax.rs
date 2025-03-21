@@ -173,12 +173,62 @@ impl SessionOp {
     }
 }
 
-impl Session {
-    fn subst(&self, x: &Id, other: &Self) -> Self {
-        todo!()
+fn merge_clauses<T: Clone>(
+    cs1: &[(SLabel, T)],
+    cs2: &[(SLabel, T)],
+    sub: bool,
+) -> Option<Vec<(SLabel, T, T)>> {
+    let mut out = vec![];
+    for (l2, s2) in cs2 {
+        if let Some((_, s1)) = cs1.iter().find(|(l1, _)| l2 == l1) {
+            out.push((l2.clone(), s1.clone(), s2.clone()))
+        } else {
+            return None;
+        }
     }
-    fn unfold(&self, x: &Id) -> Self {
-        todo!()
+    if !sub {
+        for (l1, _) in cs1 {
+            if let None = cs2.iter().find(|(l2, _)| l1 == l2) {
+                return None;
+            }
+        }
+    }
+    Some(out)
+}
+
+impl Session {
+    fn subst(&self, x: &Id, s_new: &Self) -> Self {
+        match self {
+            Session::Var(y) if *x == **y => s_new.clone(),
+            Session::Var(y) => Session::Var(y.clone()),
+            Session::Mu(y, e) => Session::Mu(y.clone(), Box::new(fake_span(e.subst(x, s_new)))),
+            Session::Op(op, t, s) => Session::Op(
+                op.clone(),
+                t.clone(),
+                Box::new(fake_span(s.subst(x, s_new))),
+            ),
+            Session::Choice(op, cs) => {
+                let cs2 = cs
+                    .iter()
+                    .map(|(l, s)| (l.clone(), fake_span(s.subst(x, s_new))))
+                    .collect();
+                Session::Choice(op.clone(), cs2)
+            }
+            Session::End(op) => Session::End(op.clone()),
+            Session::Return => Session::Return,
+        }
+    }
+    fn unfold(&self, x: &SId) -> Self {
+        self.subst(
+            x,
+            &Session::Mu(x.clone(), Box::new(fake_span(self.clone()))),
+        )
+    }
+    pub fn unfold_if_mu(&self) -> Self {
+        match self {
+            Session::Mu(x, s) => s.unfold(x).unfold_if_mu(),
+            _ => self.clone(),
+        }
     }
     fn sem_eq_(&self, other: &Self, seen: &mut HashSet<(Session, Session)>) -> bool {
         if !seen.insert((self.clone(), other.clone())) {
@@ -190,12 +240,15 @@ impl Session {
                 }
                 (Session::End(op1), Session::End(op2)) => op1 == op2,
                 (Session::Return, Session::Return) => true,
-                (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) => {
-                    let cs: Vec<(Label, Session, Session)> = todo!();
-                    cs.iter().all(|(_, s1, s2)| s1.sem_eq_(s2, seen))
+                (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) if op1 == op2 => {
+                    if let Some(cs) = merge_clauses(&cs1, &cs2, false) {
+                        cs.iter().all(|(_, s1, s2)| s1.sem_eq_(s2, seen))
+                    } else {
+                        false
+                    }
                 }
-                (Session::Mu(x1, s1), _) => s1.unfold(&x1.val).sem_eq_(other, seen),
-                (_, Session::Mu(x2, s2)) => self.sem_eq_(&s2.unfold(&x2.val), seen),
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1).sem_eq_(other, seen),
+                (_, Session::Mu(x2, s2)) => self.sem_eq_(&s2.unfold(&x2), seen),
                 (Session::Var(_x1), _) => unreachable!(),
                 (_, Session::Var(_x2)) => unreachable!(),
                 _ => false,
@@ -214,7 +267,7 @@ impl Session {
             Ok(None)
         } else {
             match (self, p) {
-                (_, Session::End(op2)) => Err(()),
+                (_, Session::End(_op2)) => Err(()),
                 (_, Session::Return) => Ok(Some(self.clone())),
                 (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2))
                     if op1 == op2 && t1.sem_eq(t2) =>
@@ -222,24 +275,27 @@ impl Session {
                     s1.split_(s2, seen)
                 }
                 (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) if op1 == op2 => {
-                    let cs: Vec<(Label, Session, Session)> = todo!();
-                    let cs2 = cs
-                        .iter()
-                        .map(|(_, s1, s2)| s1.split_(s2, seen))
-                        .collect::<Result<Vec<_>, ()>>()?;
-                    let mut it = cs2.into_iter().flatten();
-                    if let Some(r) = it.next() {
-                        if it.all(|r2| r.sem_eq(&r2)) {
-                            Ok(Some(r))
+                    if let Some(cs) = merge_clauses(&cs1, &cs2, *op1 == SessionOp::Send) {
+                        let cs = cs
+                            .iter()
+                            .map(|(_, s1, s2)| s1.split_(s2, seen))
+                            .collect::<Result<Vec<_>, ()>>()?;
+                        let mut it = cs.into_iter().flatten();
+                        if let Some(r) = it.next() {
+                            if it.all(|r2| r.sem_eq(&r2)) {
+                                Ok(Some(r))
+                            } else {
+                                Err(())
+                            }
                         } else {
-                            Err(())
+                            Ok(None)
                         }
                     } else {
-                        Ok(None)
+                        return Err(());
                     }
                 }
-                (Session::Mu(x1, s1), _) => s1.unfold(&x1.val).split_(p, seen),
-                (_, Session::Mu(x2, s2)) => self.split_(&s2.unfold(&x2.val), seen),
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1).split_(p, seen),
+                (_, Session::Mu(x2, s2)) => self.split_(&s2.unfold(&x2), seen),
                 (Session::Var(_x1), _) => unreachable!(),
                 (_, Session::Var(_x2)) => unreachable!(),
                 _ => Err(()),
@@ -247,13 +303,10 @@ impl Session {
         }
     }
     pub fn split(&self, s1: &Session) -> Option<Self> {
-        match (self, s1) {
-            (_, Session::Return) => Some(self.clone()),
-            (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2)) if op1 == op2 && t1.eq(&t2) => {
-                s1.split(&s2)
-            }
-            _ => None,
-        }
+        let r = self.split_(s1, &mut HashSet::new()).ok()?;
+        println!("=========== {:?}", r);
+        // TODO
+        r
     }
     pub fn dual(&self) -> Self {
         match self {
@@ -287,25 +340,41 @@ impl Session {
                 Session::Choice(*op, cs2)
             }
             Session::Return | Session::End(_) => s.clone(), // TODO
-            Session::Mu(x, s) => todo!(),
-            Session::Var(x) => todo!(),
+            Session::Mu(x, s1) => Session::Mu(x.clone(), Box::new(fake_span(s1.join(s)))),
+            Session::Var(x) => Session::Var(x.clone()),
         }
     }
 
     pub fn is_owned(&self) -> bool {
-        !self.is_borrowed()
+        match self {
+            Session::Var(_x) => true,
+            Session::Mu(_x, s) => s.is_owned(),
+            Session::Op(_op, _t, s) => s.is_owned(),
+            Session::Choice(_op, cs) => cs.iter().all(|(_l, s)| s.is_owned()),
+            Session::End(_op) => true,
+            Session::Return => false,
+        }
     }
 
     pub fn is_borrowed(&self) -> bool {
-        match self {
-            Session::Var(x) => todo!(), // TODO
-            Session::Mu(x, s) => s.is_borrowed(),
-            Session::Op(op, t, s) => s.is_borrowed(),
-            Session::Choice(s, cs) => cs.first().unwrap().1.is_borrowed(), // TODO
-            Session::End(op) => false,
-            Session::Return => true,
-        }
+        !self.is_owned()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeSemEq(pub Type);
+
+impl PartialEq for TypeSemEq {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.sem_eq(&other.0)
+    }
+}
+
+impl Eq for TypeSemEq {}
+
+// Safe, but not performant
+impl Hash for TypeSemEq {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {}
 }
 
 impl Expr {
@@ -383,7 +452,27 @@ impl Pattern {
 
 impl Type {
     pub fn sem_eq(&self, other: &Self) -> bool {
-        todo!()
+        match (self, other) {
+            (Type::Chan(s1), Type::Chan(s2)) => s1.sem_eq(s2),
+            (Type::Arr(m1, p1, t11, t12), Type::Arr(m2, p2, t21, t22)) => {
+                m1 == m2 && p1 == p2 && t11.sem_eq(t21) && t12.sem_eq(t22)
+            }
+            (Type::Prod(m1, t11, t12), Type::Prod(m2, t21, t22)) => {
+                m1 == m2 && t11.sem_eq(t21) && t12.sem_eq(t22)
+            }
+            (Type::Variant(cs1), Type::Variant(cs2)) => {
+                if let Some(cs) = merge_clauses(&cs1, &cs2, false) {
+                    cs.iter().all(|(_, t1, t2)| t1.sem_eq(t2))
+                } else {
+                    false
+                }
+            }
+            (Type::Unit, Type::Unit) => true,
+            (Type::Int, Type::Int) => true,
+            (Type::Bool, Type::Bool) => true,
+            (Type::String, Type::String) => true,
+            _ => false,
+        }
     }
     pub fn is_unr(&self) -> bool {
         match self {

@@ -104,6 +104,10 @@ pub enum Token<'a> {
     Fork,
     #[regex("µ|mu")]
     Mu,
+    #[token("select")]
+    Select,
+    #[token("offer")]
+    Offer,
 
     // Operators
     #[token(";")]
@@ -302,6 +306,8 @@ impl<'a> Token<'a> {
             Token::BoolT => "Bool",
             Token::StringT => "String",
             Token::Mu => "µ",
+            Token::Select => "select",
+            Token::Offer => "offer",
         }
     }
 }

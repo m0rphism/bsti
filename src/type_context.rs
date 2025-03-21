@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use crate::ren::Ren;
 use crate::rep::Rep;
-use crate::syntax::{Id, Mult, SId, SType, Session, SessionOp, Type};
+use crate::syntax::{Id, Mult, SId, SType, Session, SessionOp, Type, TypeSemEq};
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
 use crate::util::pretty::{pretty_def, Pretty, PrettyEnv};
@@ -181,6 +181,7 @@ impl Ctx {
             .binds()
             .into_iter()
             .filter(|(_, t)| !t.is_unr())
+            .map(|(x, t)| (x, TypeSemEq(t)))
             .partition::<HashSet<_>, _>(|(x, _)| xs.contains(x));
         for b1 in &binds_xs {
             for b2 in &binds_not_xs {
@@ -338,6 +339,9 @@ impl Ctx {
         self.flatmap_binds(&mut |x, t| {
             if let Some(s1) = sis.get(&x) {
                 if let Type::Chan(s) = &t {
+                    println!("Trying to split");
+                    println!("  {}", pretty_def(s));
+                    println!("  {}", pretty_def(s1));
                     if let Some(s2) = s.split(s1) {
                         return Ctx::Join(
                             Box::new(Ctx::Bind(
@@ -548,8 +552,8 @@ impl CtxCtx {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemCtx {
-    pub ord: Graph<(Id, Type)>,
-    pub unr: HashSet<(Id, Type)>,
+    pub ord: Graph<(Id, TypeSemEq)>,
+    pub unr: HashSet<(Id, TypeSemEq)>,
 }
 
 impl SemCtx {
@@ -562,9 +566,9 @@ impl SemCtx {
     pub fn bind(x: Id, t: Type) -> Self {
         let mut c = Self::empty();
         if t.is_unr() {
-            c.unr.insert((x, t));
+            c.unr.insert((x, TypeSemEq(t)));
         } else {
-            c.ord = Graph::singleton((x, t));
+            c.ord = Graph::singleton((x, TypeSemEq(t)));
         }
         c
     }
@@ -651,7 +655,7 @@ impl Pretty<()> for SemCtx {
             p.pp("  ");
             p.pp(x);
             p.pp(" : ");
-            p.pp(t);
+            p.pp(&t.0);
             p.pp("\n");
         }
         p.pp("\nGraph:\n");
@@ -661,13 +665,13 @@ impl Pretty<()> for SemCtx {
             p.pp("  ");
             p.pp(x);
             p.pp(" : ");
-            p.pp(t);
+            p.pp(&t.0);
             p.pp("\n");
             for (x, t) in ys {
                 p.pp("    ");
                 p.pp(x);
                 p.pp(" : ");
-                p.pp(t);
+                p.pp(&t.0);
                 p.pp("\n");
             }
         }
