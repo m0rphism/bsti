@@ -51,6 +51,7 @@ pub enum TypeError {
     WfEmptyVariant(SType),
     MainReturnsOrd(SExpr, SType),
     WfSessionNotClosed(SSession, SId),
+    WfSessionShadowing(SSession, SId),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -296,6 +297,9 @@ fn check_wf_session_(s: &SSession, at_mu: bool, vars: &HashSet<Id>) -> Result<()
             }
         }
         Session::Mu(x, s1) => {
+            if vars.contains(&x.val) {
+                return Err(TypeError::WfSessionShadowing(s.clone(), x.clone()));
+            }
             let mut vars = vars.clone();
             vars.insert(x.val.clone());
             check_wf_session_(s1, true, &vars)

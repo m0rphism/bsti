@@ -614,6 +614,18 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::WfSessionShadowing(s, x) => {
+                report(
+                    &src,
+                    s.span.clone(),
+                    "Type Error",
+                    [label(
+                        s.span,
+                        format!("Variable '{}' was already bound further outside. Shadowing is not allowed in session types.",
+                            pretty_def(x)),
+                    )],
+                );
+            }
         },
         IErr::Eval(e) => match e {
             EvalError::ValMismatch(e, v_expected, v_actual) => {
