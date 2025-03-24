@@ -16,6 +16,5 @@ in let
     let v = sum_avr x0 1 &c in
     send v &c ;
     term c
-
 in
 unit

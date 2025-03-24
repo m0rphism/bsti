@@ -1,0 +1,11 @@
+let
+  two_shot : Chan (?Int.?Int.return) -[ u 1 ]-> Int
+  two_shot c =
+    recv &c + recv c
+in let
+  main : Chan (mu X. ?Int. X) *[p] Chan (mu X. !Int. X) -[u 1]-> Unit
+  main (cin, cout) =
+    send (two_shot &cin) &cout ;
+    main (cin, cout)
+in
+unit
