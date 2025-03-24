@@ -10,11 +10,11 @@ let
       Avr c  -> { drop c; s / n }
     }
 in let
-  main : Chan (?Int. mu X. &{Next: ?Int. X, Sum: !Int.term, Avr: !Int.term}) -[u 1]-> Unit
+  main : Chan (?Int. mu X. &{Next: ?Int. X, Sum: !Int.Close, Avr: !Int.Close}) -[u 1]-> Unit
   main c =
     let x0 = recv &c in
     let v = sum_avr x0 1 &c in
     send v &c ;
-    term c
+    close c
 in
 unit

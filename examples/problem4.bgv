@@ -1,11 +1,11 @@
 let
-  problem4 : Chan (!(Chan (?Int. return)). term)
-          -[ u 0 ]-> Chan (?Int. ?String. term)
+  problem4 : Chan (!(Chan (?Int. return)). Close)
+          -[ u 0 ]-> Chan (?Int. ?String. Close)
 	  -[ p 1 ]-> Unit
   problem4 h c =
     send (&c : Chan (?Int. return)) &h ;
-    term h ;
+    close h ;
     (let s = "" + (recv &c) in
-    term c)
+    close c)
 in
   unit

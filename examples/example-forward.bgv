@@ -5,5 +5,8 @@ let
         snd x = send x d in
     let y = recv c in
     y |> snd
+in let
+  example : Chan (?Int. !Int. return) -[ u 1]-> Unit
+  example c = forward &c &c; drop c
 in
   unit
