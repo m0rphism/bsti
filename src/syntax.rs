@@ -230,25 +230,26 @@ impl Session {
             _ => self.clone(),
         }
     }
-    fn sem_eq_(&self, other: &Self, seen: &mut HashSet<(Session, Session)>) -> bool {
+    fn sem_eq_(&self, other: &Self, seen: &HashSet<(Session, Session)>) -> bool {
+        let mut seen = seen.clone();
         if !seen.insert((self.clone(), other.clone())) {
             return true;
         } else {
             match (self, other) {
                 (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2)) => {
-                    op1 == op2 && t1.sem_eq(t2) && s1.sem_eq_(s2, seen)
+                    op1 == op2 && t1.sem_eq(t2) && s1.sem_eq_(s2, &seen)
                 }
                 (Session::End(op1), Session::End(op2)) => op1 == op2,
                 (Session::Return, Session::Return) => true,
                 (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) if op1 == op2 => {
                     if let Some(cs) = merge_clauses(&cs1, &cs2, false) {
-                        cs.iter().all(|(_, s1, s2)| s1.sem_eq_(s2, seen))
+                        cs.iter().all(|(_, s1, s2)| s1.sem_eq_(s2, &seen))
                     } else {
                         false
                     }
                 }
-                (Session::Mu(x1, s1), _) => s1.unfold(&x1).sem_eq_(other, seen),
-                (_, Session::Mu(x2, s2)) => self.sem_eq_(&s2.unfold(&x2), seen),
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1).sem_eq_(other, &seen),
+                (_, Session::Mu(x2, s2)) => self.sem_eq_(&s2.unfold(&x2), &seen),
                 (Session::Var(_x1), _) => unreachable!(),
                 (_, Session::Var(_x2)) => unreachable!(),
                 _ => false,
@@ -256,13 +257,10 @@ impl Session {
         }
     }
     pub fn sem_eq(&self, other: &Self) -> bool {
-        self.sem_eq_(other, &mut HashSet::new())
+        self.sem_eq_(other, &HashSet::new())
     }
-    fn split_(
-        &self,
-        p: &Session,
-        seen: &mut HashSet<(Session, Session)>,
-    ) -> Result<Option<Self>, ()> {
+    fn split_(&self, p: &Session, seen: &HashSet<(Session, Session)>) -> Result<Option<Self>, ()> {
+        let mut seen = seen.clone();
         if !seen.insert((self.clone(), p.clone())) {
             Ok(None)
         } else {
@@ -272,13 +270,13 @@ impl Session {
                 (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2))
                     if op1 == op2 && t1.sem_eq(t2) =>
                 {
-                    s1.split_(s2, seen)
+                    s1.split_(s2, &seen)
                 }
                 (Session::Choice(op1, cs1), Session::Choice(op2, cs2)) if op1 == op2 => {
                     if let Some(cs) = merge_clauses(&cs1, &cs2, *op1 == SessionOp::Send) {
                         let cs = cs
                             .iter()
-                            .map(|(_, s1, s2)| s1.split_(s2, seen))
+                            .map(|(_, s1, s2)| s1.split_(s2, &seen))
                             .collect::<Result<Vec<_>, ()>>()?;
                         let mut it = cs.into_iter().flatten();
                         if let Some(r) = it.next() {
@@ -294,8 +292,8 @@ impl Session {
                         return Err(());
                     }
                 }
-                (Session::Mu(x1, s1), _) => s1.unfold(&x1).split_(p, seen),
-                (_, Session::Mu(x2, s2)) => self.split_(&s2.unfold(&x2), seen),
+                (Session::Mu(x1, s1), _) => s1.unfold(&x1).split_(p, &seen),
+                (_, Session::Mu(x2, s2)) => self.split_(&s2.unfold(&x2), &seen),
                 (Session::Var(_x1), _) => unreachable!(),
                 (_, Session::Var(_x2)) => unreachable!(),
                 _ => Err(()),
@@ -303,7 +301,7 @@ impl Session {
         }
     }
     pub fn split(&self, s1: &Session) -> Option<Self> {
-        let r = self.split_(s1, &mut HashSet::new()).ok()?;
+        let r = self.split_(s1, &HashSet::new()).ok()?;
         // TODO
         r
     }
