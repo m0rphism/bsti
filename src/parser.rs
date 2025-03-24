@@ -120,7 +120,7 @@ peg::parser! {
             / tok(BoolT) { Type::Bool }
             / tok(StringT) { Type::String }
             / tok(ParenL) t:type_() tok(ParenR) { t }
-            / tok(Chan) s:ssession() { Type::Chan(s) }
+            / tok(Chan)? s:ssession() { Type::Chan(s) }
             / tok(Lt) cs:((l:sid() tok(Colon) t:stype() { (l , t) }) ** tok(Comma)) tok(Comma)? tok(Gt) { Type::Variant(cs) }
         pub rule stype_atom() -> SType = spanned(<type_atom()>)
 
