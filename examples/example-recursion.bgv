@@ -1,0 +1,21 @@
+let
+  sum_avr : Int
+          -[u 0]-> Int
+	  -[u 0]-> Chan (mu X. &{Next: ?Int. X, Sum: return, Avr: return})
+	  -[u 1]-> Int
+  sum_avr s n c0 =
+    case offer c0 {
+      Next c -> { sum_avr (recv &c + s) (n + 1) c }
+      Sum c  -> { drop c; s }
+      Avr c  -> { drop c; s / n }
+    }
+in let
+  main : Chan (?Int. mu X. &{Next: ?Int. X, Sum: !Int.term, Avr: !Int.term}) -[u 1]-> Unit
+  main c =
+    let x0 = recv &c in
+    let v = sum_avr x0 1 &c in
+    send v &c ;
+    term c
+
+in
+unit
