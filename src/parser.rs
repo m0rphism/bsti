@@ -76,7 +76,7 @@ peg::parser! {
         pub rule session() -> Session
             = tok(Return) { Session::Return }
             / tok(Wait) { Session::End(SessionOp::Recv) }
-            / tok(Term) { Session::End(SessionOp::Send) }
+            / tok(Close) { Session::End(SessionOp::Send) }
             / tok(Bang) t:stype_atom() tok(Period) s:ssession() 
               { Session::Op(SessionOp::Send, Box::new(t), Box::new(s)) }
             / tok(QuestionMark) t:stype_atom() tok(Period) s:ssession() 
@@ -120,7 +120,7 @@ peg::parser! {
             / tok(BoolT) { Type::Bool }
             / tok(StringT) { Type::String }
             / tok(ParenL) t:type_() tok(ParenR) { t }
-            / tok(Chan) s:ssession() { Type::Chan(s) }
+            / tok(Chan)? s:ssession() { Type::Chan(s) }
             / tok(Lt) cs:((l:sid() tok(Colon) t:stype() { (l , t) }) ** tok(Comma)) tok(Comma)? tok(Gt) { Type::Variant(cs) }
         pub rule stype_atom() -> SType = spanned(<type_atom()>)
 
@@ -219,7 +219,7 @@ peg::parser! {
             / tok(Send) e1:sexpr_atom() e2:sexpr_atom() { Expr::Send(Box::new(e1), Box::new(e2)) }
             / tok(Recv) e:sexpr_atom() { Expr::Recv(Box::new(e)) }
             / tok(Drop) e:sexpr_atom() { Expr::Drop(Box::new(e)) }
-            / tok(Term) e:sexpr_atom() { Expr::End(SessionOp::Send, Box::new(e)) }
+            / tok(Close) e:sexpr_atom() { Expr::End(SessionOp::Send, Box::new(e)) }
             / tok(Wait) e:sexpr_atom() { Expr::End(SessionOp::Recv, Box::new(e)) }
             / tok(Select) l:sid() e:sexpr_atom() { Expr::Select(l, Box::new(e)) }
             / tok(Offer) e:sexpr_atom() { Expr::Offer(Box::new(e)) }

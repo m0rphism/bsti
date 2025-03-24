@@ -86,12 +86,12 @@ pub enum Token<'a> {
     Send,
     #[token("recv")]
     Recv,
-    #[token("return")]
+    #[regex("return|Return")]
     Return,
-    #[token("wait")]
+    #[regex("wait|Wait")]
     Wait,
-    #[token("term")]
-    Term,
+    #[regex("close|Close")]
+    Close,
     #[token("Chan")]
     Chan,
     #[token("|>")]
@@ -289,7 +289,7 @@ impl<'a> Token<'a> {
             Token::Recv => "recv",
             Token::Return => "return",
             Token::Wait => "wait",
-            Token::Term => "term",
+            Token::Close => "close",
             Token::Chan => "Chan",
             Token::TriRight => "|>",
             Token::Case => "case",

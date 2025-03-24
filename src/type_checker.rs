@@ -50,6 +50,7 @@ pub enum TypeError {
     WfEmptyChoice(SSession),
     WfEmptyVariant(SType),
     MainReturnsOrd(SExpr, SType),
+    WfSessionNotClosed(SSession, SId),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -283,19 +284,25 @@ pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
     Ok(())
 }
 
-fn check_wf_session_(s: &SSession, at_mu: bool) -> Result<(), TypeError> {
+fn check_wf_session_(s: &SSession, at_mu: bool, vars: &HashSet<Id>) -> Result<(), TypeError> {
     match &s.val {
         Session::Var(x) => {
             if at_mu {
                 Err(TypeError::WfNonContractive(s.clone(), x.clone()))
+            } else if !vars.contains(&x.val) {
+                Err(TypeError::WfSessionNotClosed(s.clone(), x.clone()))
             } else {
                 Ok(())
             }
         }
-        Session::Mu(_x, s1) => check_wf_session_(s1, true),
+        Session::Mu(x, s1) => {
+            let mut vars = vars.clone();
+            vars.insert(x.val.clone());
+            check_wf_session_(s1, true, &vars)
+        }
         Session::Op(_op, t1, s1) => {
             check_wf_type(t1)?;
-            check_wf_session_(s1, false)?;
+            check_wf_session_(s1, false, vars)?;
             Ok(())
         }
         Session::Choice(_op, cs) => {
@@ -303,7 +310,7 @@ fn check_wf_session_(s: &SSession, at_mu: bool) -> Result<(), TypeError> {
                 Err(TypeError::WfEmptyChoice(s.clone()))
             } else {
                 for (_l, s1) in cs {
-                    check_wf_session_(s1, at_mu)?;
+                    check_wf_session_(s1, at_mu, vars)?;
                 }
                 Ok(())
             }
@@ -314,7 +321,7 @@ fn check_wf_session_(s: &SSession, at_mu: bool) -> Result<(), TypeError> {
 }
 
 pub fn check_wf_session(s: &SSession) -> Result<(), TypeError> {
-    check_wf_session_(s, false)
+    check_wf_session_(s, false, &HashSet::new())
 }
 
 pub fn check_wf_type(t: &SType) -> Result<(), TypeError> {
@@ -1103,6 +1110,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             Ok((fake_span(t), u1.join(&u2), Eff::lub(p1, p2)))
         }
         Expr::LetDecl(x, t, cs, e2) => {
+            check_wf_type(&t)?;
             let c: &SClause = if cs.len() == 1 {
                 cs.first().unwrap()
             } else {

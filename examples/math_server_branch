@@ -13,7 +13,7 @@ let
 in
 
 let
-  client : Chan (µ x. +{next: !Int.x, done: ?Int.term}) -[ u 1 ]→ Unit
+  client : Chan (µ x. +{next: !Int.x, done: ?Int.close}) -[ u 1 ]→ Unit
   client c =
     select next &c;
     send 1 &c;
@@ -21,9 +21,9 @@ let
     send 2 &c;
     select done &c;
     print (recv &c);
-    term c
+    close c
 in
 
-let c1, c2 = new (µ x. +{next: !Int.x, done: ?Int.term}) in
+let c1, c2 = new (µ x. +{next: !Int.x, done: ?Int.close}) in
 fork (server 0 c2);
 client c1

@@ -602,6 +602,18 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::WfSessionNotClosed(s, x) => {
+                report(
+                    &src,
+                    s.span.clone(),
+                    "Type Error",
+                    [label(
+                        s.span,
+                        format!("Variable '{}' is not bound by a µ-binder. Session types need to be closed.",
+                            pretty_def(x)),
+                    )],
+                );
+            }
         },
         IErr::Eval(e) => match e {
             EvalError::ValMismatch(e, v_expected, v_actual) => {

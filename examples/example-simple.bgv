@@ -1,8 +1,8 @@
 let
-  ex1 : Chan (!Int. term) -[ u 1 ]-> Unit
+  ex1 : Chan (!Int. close) -[ u 1 ]-> Unit
   ex1 c =
     send 4711 &c ;
-    term c
+    close c
 in let
   ex2 : Chan (!String. !Int. return) -[ u 1 ]-> Unit
   ex2 b =
