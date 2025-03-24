@@ -561,7 +561,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 ));
             };
 
-            if m.val == Mult::OrdR {
+            if m.val == Mult::OrdL {
                 return Err(TypeError::MismatchMult(
                     *e1.clone(),
                     t1.clone(),
@@ -576,7 +576,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             check_split_alg(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &c2, m.to_join_ord())?;
 
-            if m.val == Mult::OrdL && p2 == Eff::Yes {
+            if m.val == Mult::OrdR && p2 == Eff::Yes {
                 return Err(TypeError::MismatchEff(
                     *e2.clone(),
                     fake_span(Eff::No),
@@ -586,7 +586,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
 
             Ok((*t12.clone(), u1.join(&u2), Eff::lub(**p, Eff::lub(p1, p2))))
         }
-        Expr::AppR(e1, e2) => {
+        Expr::AppL(e1, e2) => {
             let fvs1 = e1.free_vars();
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
@@ -610,11 +610,11 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 ));
             }
 
-            if m.val != Mult::OrdR {
+            if m.val != Mult::OrdL {
                 return Err(TypeError::MismatchMult(
-                    *e1.clone(),
-                    t1.clone(),
-                    Ok(fake_span(Mult::OrdR)),
+                    *e2.clone(),
+                    t2.clone(),
+                    Ok(fake_span(Mult::OrdL)),
                     m.clone(),
                 ));
             }
@@ -662,7 +662,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                         JoinOrd::Ordered,
                     );
                     if ctx.is_subctx_of(&c12_ordl) {
-                        Mult::OrdL
+                        Mult::OrdR
                     } else {
                         Err(TypeError::CtxSplitFailed(
                             e.clone(),
@@ -674,12 +674,12 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             };
 
             match m {
-                Mult::OrdL if t1.is_ord() && p2 == Eff::Yes => Err(TypeError::MismatchEff(
+                Mult::OrdR if t1.is_ord() && p2 == Eff::Yes => Err(TypeError::MismatchEff(
                     *e2.clone(),
                     fake_span(Eff::No),
                     fake_span(p2),
                 ))?,
-                Mult::OrdR if t2.is_ord() && p1 == Eff::Yes => Err(TypeError::MismatchEff(
+                Mult::OrdL if t2.is_ord() && p1 == Eff::Yes => Err(TypeError::MismatchEff(
                     *e1.clone(),
                     fake_span(Eff::No),
                     fake_span(p1),
@@ -923,7 +923,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 // TODO
             }
             let t = fake_span(Type::Prod(
-                fake_span(Mult::OrdL),
+                fake_span(Mult::OrdR),
                 Box::new(fake_span(Type::Chan(s.clone()))),
                 Box::new(fake_span(Type::Chan(fake_span(s.dual())))),
             ));

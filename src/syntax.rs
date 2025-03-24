@@ -11,8 +11,8 @@ pub type SId = Spanned<Id>;
 pub enum Mult {
     Unr,
     Lin,
-    OrdL,
     OrdR,
+    OrdL,
 }
 pub type SMult = Spanned<Mult>;
 
@@ -121,7 +121,7 @@ pub enum Expr {
     Var(SId),
     Abs(SId, Box<SExpr>),
     App(Box<SExpr>, Box<SExpr>),
-    AppR(Box<SExpr>, Box<SExpr>),
+    AppL(Box<SExpr>, Box<SExpr>),
     Borrow(SId),
 
     Let(SId, Box<SExpr>, Box<SExpr>),
@@ -399,7 +399,7 @@ impl Expr {
                 }
                 union(xs, e.free_vars())
             }
-            Expr::AppR(e1, e2) => union(e1.free_vars(), e2.free_vars()),
+            Expr::AppL(e1, e2) => union(e1.free_vars(), e2.free_vars()),
             Expr::Borrow(x) => HashSet::from([x.val.clone()]),
             Expr::Inj(_l, e) => e.free_vars(),
             Expr::CaseSum(e, cs) => {

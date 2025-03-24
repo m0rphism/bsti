@@ -24,13 +24,13 @@ impl Mult {
         match self {
             Mult::Unr => JoinOrd::Ordered,
             Mult::Lin => JoinOrd::Unordered,
-            Mult::OrdL => JoinOrd::Ordered,
             Mult::OrdR => JoinOrd::Ordered,
+            Mult::OrdL => JoinOrd::Ordered,
         }
     }
     pub fn choose_ctxs<'a>(&self, c1: &'a Ctx, c2: &'a Ctx) -> (&'a Ctx, &'a Ctx) {
         match self {
-            Mult::OrdR => (c2, c1),
+            Mult::OrdL => (c2, c1),
             _ => (c1, c2),
         }
     }
@@ -63,8 +63,8 @@ pub fn ext(m: Mult, c1: Ctx, c2: Ctx) -> Ctx {
     match m {
         Mult::Unr => CtxS::Join(c1, c2, JoinOrd::Ordered),
         Mult::Lin => CtxS::Join(c1, c2, JoinOrd::Unordered),
-        Mult::OrdL => CtxS::Join(c1, c2, JoinOrd::Ordered),
-        Mult::OrdR => CtxS::Join(c2, c1, JoinOrd::Ordered),
+        Mult::OrdR => CtxS::Join(c1, c2, JoinOrd::Ordered),
+        Mult::OrdL => CtxS::Join(c2, c1, JoinOrd::Ordered),
     }
 }
 

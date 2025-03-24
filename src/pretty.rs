@@ -38,7 +38,7 @@ impl Pretty<UserState> for Type {
                     Mult::Lin => {
                         p.pp(" ⊗ ");
                     }
-                    Mult::OrdL => {
+                    Mult::OrdR => {
                         p.pp(" ⊙ ");
                     }
                     _ => {
@@ -122,8 +122,8 @@ impl Pretty<UserState> for Mult {
         match self {
             Mult::Unr => p.pp("unr"),
             Mult::Lin => p.pp("lin"),
-            Mult::OrdL => p.pp("left"),
             Mult::OrdR => p.pp("right"),
+            Mult::OrdL => p.pp("left"),
         }
     }
 }
@@ -185,7 +185,7 @@ impl Pretty<UserState> for Expr {
                 p.pp(" ");
                 p.pp_arg(R, e2);
             }),
-            Expr::AppR(e1, e2) => p.infix(10, L, |p| {
+            Expr::AppL(e1, e2) => p.infix(10, L, |p| {
                 p.pp_arg(L, e1);
                 p.pp(" |> ");
                 p.pp_arg(R, e2);

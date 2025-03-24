@@ -58,8 +58,8 @@ peg::parser! {
         pub rule mult() -> Mult
             = (tok(Unr) / [Tok(Id("u"))]) { Mult::Unr }
             / (tok(Lin) / [Tok(Id("p"))]) { Mult::Lin }
-            / (tok(Left) / [Tok(Id("l"))]) { Mult::OrdL }
             / (tok(Right) / [Tok(Id("r"))]) { Mult::OrdR }
+            / (tok(Left) / [Tok(Id("l"))]) { Mult::OrdL }
             / expected!("multiplicity")
         pub rule smult() -> SMult = spanned(<mult()>)
 
@@ -107,7 +107,7 @@ peg::parser! {
             = t1:stype_atom() tok(Star) tok(BracketL) m:smult() tok(BracketR) t2:stype_prod()
               { Type::Prod(m, Box::new(t1), Box::new(t2)) }
             / t1:stype_atom() tok(StarOrdL) t2:stype_prod()
-              { Type::Prod(fake_span(Mult::OrdL), Box::new(t1), Box::new(t2)) }
+              { Type::Prod(fake_span(Mult::OrdR), Box::new(t1), Box::new(t2)) }
             / t1:stype_atom() tok(StarLin) t2:stype_prod()
               { Type::Prod(fake_span(Mult::Lin), Box::new(t1), Box::new(t2)) }
             / t:type_atom() { t }
@@ -227,7 +227,7 @@ peg::parser! {
             / tok(Fork) e:sexpr_atom() { Expr::Fork(Box::new(e)) }
             / tok(ToStr) e:sexpr_atom() { Expr::Op1(Op1::ToStr, Box::new(e)) }
             / tok(Print) e:sexpr_atom() { Expr::Op1(Op1::Print, Box::new(e)) }
-            / e1:sexpr_app() tok(TriRight) e2:sexpr_atom() { Expr::AppR(Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_app() tok(TriRight) e2:sexpr_atom() { Expr::AppL(Box::new(e1), Box::new(e2)) }
             / e1:sexpr_app() e2:sexpr_atom() { Expr::App(Box::new(e1), Box::new(e2)) }
             / e:expr_atom() { e }
         pub rule sexpr_app() -> SExpr = spanned(<expr_app()>)

@@ -197,7 +197,7 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
                 )),
             }
         }
-        Expr::AppR(e1, e2) => {
+        Expr::AppL(e1, e2) => {
             let v1 = eval_(env, e1)?;
             let v2 = eval_(env, e2)?;
             match v2 {
