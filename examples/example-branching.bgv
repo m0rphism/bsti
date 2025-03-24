@@ -1,0 +1,16 @@
+let
+  calculate : Chan (&{Add: ?Int. ?Int. return, Neg: ?Int. return}) -[ u 1 ]-> Int
+  calculate c0 =
+    case offer c0 {
+      Add c -> { recv &c + recv c }
+      Neg c -> { 0 - recv c }
+    }
+in let
+  server : Chan (&{Add: ?Int. ?Int. !Int. term, Neg: ?Int. !Int. term}) -[ u 1 ]-> Unit
+  server c =
+    let r = calculate &c in      #(* c : !Int. Close *)
+    ## some accounting
+    send r &c;                   #(* c : Close *)
+    term c
+in
+unit

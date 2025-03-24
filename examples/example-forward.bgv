@@ -1,0 +1,8 @@
+let
+  forward : Chan (?Int. return) -[ r 0 ]-> Chan (!Int. return) -[ r 1 ]-> Unit
+  forward c d =
+    let snd : Int -[ r 1 ]-> Unit
+        snd x = send x d
+    in  (recv c) |> snd
+in
+  unit

@@ -1,0 +1,19 @@
+let
+  ex1 : Chan (!Int. term) -[ u 1 ]-> Unit
+  ex1 c =
+    send 4711 &c ;
+    term c
+in let
+  ex2 : Chan (!String. !Int. return) -[ u 1 ]-> Unit
+  ex2 b =
+    send "foo" &b ;
+    send 42 &b ;
+    drop b
+in let
+  ex3 : Chan (!String. !Int. return) -[ u 1 ]-> Unit
+  ex3 b =
+    send "foo" &b ;
+    send 42 b
+in
+  unit
+  
