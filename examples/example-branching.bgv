@@ -6,11 +6,11 @@ let
       Neg c -> { 0 - recv c }
     }
 in let
-  server : Chan (&{Add: ?Int. ?Int. !Int. term, Neg: ?Int. !Int. term}) -[ u 1 ]-> Unit
+  server : Chan (&{Add: ?Int. ?Int. !Int. close, Neg: ?Int. !Int. close}) -[ u 1 ]-> Unit
   server c =
     let r = calculate &c in      #(* c : !Int. Close *)
     ## some accounting
     send r &c;                   #(* c : Close *)
-    term c
+    close c
 in
 unit

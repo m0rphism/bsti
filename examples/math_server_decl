@@ -8,14 +8,14 @@ let
 in
 
 let
-  client : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
+  client : Chan (!Int.!Int.?Int.close) -[ u 1 ]→ Unit
   client c =
     send 1 &c;
     send 2 &c;
     print (recv (&c : Chan (?Int.return)));
-    term c
+    close c
 in
 
-let c1, c2 = new (!Int.!Int.?Int.term) in
+let c1, c2 = new (!Int.!Int.?Int.close) in
 fork (server c2);
 client c1
