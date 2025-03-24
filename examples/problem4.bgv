@@ -1,11 +1,11 @@
 let
-  problem4 : Chan (!(Chan (?Int. return)). Close)
-          -[ u 0 ]-> Chan (?Int. ?String. Close)
-	  -[ p 1 ]-> Unit
+  problem4 : !(Chan (?Int. return)). Close -[ u 0 ]->
+             ?Int. ?String. Close -[ p 1 ]->
+             Unit
   problem4 h c =
-    send (&c : Chan (?Int. return)) &h ;
-    close h ;
-    (let s = "" + (recv &c) in
-    close c)
+    send (&c : ?Int. Return) &h;
+    close h;
+    let s = "" + (recv &c) in
+    close c
 in
   unit

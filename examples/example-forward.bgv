@@ -1,12 +1,12 @@
 let
-  forward : Chan (?Int. return) -[ u 0 ]-> Chan (!Int. return) -[ r 1 ]-> Unit
+  forward : ?Int. Return -[ u 0 ]-> !Int. Return -[ r 1 ]-> Unit
   forward c d =
     let snd : Int -[ l 1 ]-> Unit
         snd x = send x d in
     let y = recv c in
     y |> snd
 in let
-  example : Chan (?Int. !Int. return) -[ u 1]-> Unit
+  example : ?Int. !Int. Return -[ u 1 ]-> Unit
   example c = forward &c &c; drop c
 in
   unit

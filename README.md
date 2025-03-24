@@ -1,7 +1,7 @@
-# Law and Order for Typestate with Borrowing
+# Borrowing from Session Types
 
 Implementation of a typechecker and interpreter for the language from the paper
-*Law and Order for Typestate with Borrowing*.
+*Borrowing from Session Types*.
 
 ## Dependencies
 
@@ -36,26 +36,22 @@ Types
 t ::= t '-[' m ';'? E ']->' t       (function type)
     | t '*[' m ']' t                (product type)
     | '<' (l ':' t ',')* '>'        (variant type)
-    | 'Chan' s                      (session type)
+    | 'Chan'? s                     (session type)
     | 'Unit'                        (unit type)
     | 'Int'                         (64bit signed integer type)
     | 'Bool'                        (boolean t type)
     | 'String'                      (unicode string type)
 
 Session Types
-s ::= so                            (owned session type)
-    | sb                            (borrowed session type)
-
-Owned Session Types
-so ::= '!' t '.' so                 (sending session type)
+s ::=  '!' t '.' so                 (sending session type)
      | '?' t '.' so                 (receiving session type)
-     | 'term'                       (sending end of protocol)
-     | 'wait'                       (receiving end of protocol)
-
-Borrowed Session Types
-sb ::= '!' t '.' sb                 (sending session type)
-     | '?' t '.' sb                 (receiving session type)
-     | 'return'                     (end of protocol)
+     | '+{' (l ':' s ',')* '}'      (internal choice type)
+     | '&{' (l ':' s ',')* '}'      (external choice type)
+     | 'Close'                      (sending end of protocol of owned session)
+     | 'Wait'                       (receiving end of protocol of owned session)
+     | 'Return'                     (end of protocol of borrowed session)
+     | 'mu' x '.' s                 (recursive session type)
+     | x                            (session variable)
 
 Expressions
 e ::= x                             (variable)
@@ -83,7 +79,7 @@ e ::= x                             (variable)
     | 'send' e1 e2                  (channel send operation)
     | 'recv' e                      (channel receive operation)
     | 'drop' e                      (elimination of borrowed channels)
-    | 'term' e                      (elimination of owned channels)
+    | 'close' e                     (elimination of owned channels)
     | 'wait' e                      (elimination of owned channels)
     | '&' x                         (borrow)
 
@@ -143,6 +139,7 @@ We also provide unicode alternatives for certain tokens:
 - A function type `t1 -[ m E ]-> t2` can also be written as `t1 –[ m E ]→ t2`
 - An unordered product type `t1 *[ p ] t2` can also be written as `t1 ⊗ t2`
 - A left-ordered product type `t1 *[ l ] t2` can also be written as `t1 ⊙ t2`
+- A recursive session type `mu x. s` can also be written as `µ x. s`
 
 Comments are started with a `#` and range until the end of the line.
 
@@ -152,7 +149,7 @@ The following shows the obligatory math server example:
 
 ```agda
 let 
-  server : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
+  server : ?Int.?Int.!Int.Wait -[ u 1 ]→ Unit
   server c =
     let x = recv &c in
     let y = recv &c in
@@ -161,15 +158,15 @@ let
 in
 
 let
-  client : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
+  client : !Int.!Int.?Int.Close -[ u 1 ]→ Unit
   client c =
     send 1 &c;
     send 2 &c;
     print (recv &c);
-    term c
+    close c
 in
 
-let c1, c2 = new (!Int.!Int.?Int.term) in
+let c1, c2 = new !Int.!Int.?Int.Close in
 fork (server c2);
 client c1
 ```
@@ -184,7 +181,7 @@ let
     let y = recv &c in
     send (x + y) &c;
     wait c
-  : Chan (?Int.?Int.!Int.wait) -[ u 1 ]→ Unit
+  : ?Int.?Int.!Int.Wait -[ u 1 ]→ Unit
 in
 
 let
@@ -192,11 +189,11 @@ let
     send 1 &c;
     send 2 &c;
     print (recv &c);
-    term c
-  : Chan (!Int.!Int.?Int.term) -[ u 1 ]→ Unit
+    close c
+  : !Int.!Int.?Int.Close -[ u 1 ]→ Unit
 in
 
-let c1, c2 = new (!Int.!Int.?Int.term) in
+let c1, c2 = new !Int.!Int.?Int.Close in
 fork (server c2);
 client c1
 ```

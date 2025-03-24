@@ -1,7 +1,7 @@
 let
-  problem2 : Chan (?Int. ?String. Close) -[ u 1 ]-> Unit
+  problem2 : ?Int. ?String. Close -[ u 1 ]-> Unit
   problem2 c =
-    let y : Chan (?Int. return)
+    let y : ?Int. return
         y = &c in
     let g : String -[ p 1 ]-> Unit
         g x = x + recv &c ; close c in     #(* c : ?String. Close *)

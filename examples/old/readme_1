@@ -1,7 +1,0 @@
-# Function that does operation 'x' and then drops the resource.
-let f = λc. drop (!{x} c)
-      : {x} –[ u 1 ]→ Unit in
-let r = new {xy} in
-let r1, r2 = split {x} r in
-f r1;
-drop (!{y} r2)

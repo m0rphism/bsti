@@ -1,16 +1,16 @@
 let
-  ex1 : Chan (!Int. close) -[ u 1 ]-> Unit
+  ex1 : !Int. Close -[ u 1 ]-> Unit
   ex1 c =
     send 4711 &c ;
     close c
 in let
-  ex2 : Chan (!String. !Int. return) -[ u 1 ]-> Unit
+  ex2 : !String. !Int. Return -[ u 1 ]-> Unit
   ex2 b =
     send "foo" &b ;
     send 42 &b ;
     drop b
 in let
-  ex3 : Chan (!String. !Int. return) -[ u 1 ]-> Unit
+  ex3 : !String. !Int. Return -[ u 1 ]-> Unit
   ex3 b =
     send "foo" &b ;
     send 42 b

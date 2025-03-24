@@ -150,14 +150,10 @@ peg::parser! {
               { Expr::LetDecl(x, t, cs, Box::new(e)) }
             / tok(If) e:sexpr_lam() tok(Then) e1:sexpr_lam() tok(Else) e2:sexpr_lam()
               { Expr::If(Box::new(e), Box::new(e1), Box::new(e2)) }
-            / e:expr_seq() { e }
-        pub rule sexpr_lam() -> SExpr = spanned(<expr_lam()>)
-
-        #[cache_left_rec]
-        pub rule expr_seq() -> Expr
-            = e1:sexpr_or() tok(Semicolon) e2:sexpr_seq() { Expr::Seq(Box::new(e1), Box::new(e2)) }
+            / e1:sexpr_or() tok(Semicolon) e2:sexpr_lam() 
+              { Expr::Seq(Box::new(e1), Box::new(e2)) }
             / e:expr_or() { e }
-        pub rule sexpr_seq() -> SExpr = spanned(<expr_seq()>)
+        pub rule sexpr_lam() -> SExpr = spanned(<expr_lam()>)
 
         #[cache_left_rec]
         pub rule expr_or() -> Expr

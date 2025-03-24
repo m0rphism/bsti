@@ -1,3 +1,0 @@
-let file1, file2 = (new {(r|w)*c}, new {(r|w)*c}) in
-drop (!{c} file1);
-drop (!{c} file2)

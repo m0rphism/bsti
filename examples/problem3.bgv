@@ -1,5 +1,5 @@
 let
-  problem3 : Chan (?Int. ?String. Close) -[ u 1 ]-> Unit
+  problem3 : ?Int. ?String. Close -[ u 1 ]-> Unit
   problem3 c =
     let _ = fork (let i = 17 + recv &c in unit) in
     let n = "" + (recv &c) in
