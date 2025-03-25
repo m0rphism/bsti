@@ -184,7 +184,8 @@ client c1
 ```
 
 This example can also be written without the syntactic sugar for Haskell-style
-function definitions:
+function definitions, i.e. as simple `let`-expressions, where the body is
+a lambda wrapped in a type annotation expression `(\c. …) : t`:
 
 ```agda
 let 
