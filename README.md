@@ -68,8 +68,8 @@ s ::=  '!' t '.' so                 (sending session type)
 Expressions
 e ::= x                             (variable)
     | '\' x '.' e                   (lambda abstraction)
-    | e e                           (unr/lin/left function application)
-    | e '|>' e                      (right function application)
+    | e e                           (unr/lin/right function application)
+    | e '|>' e                      (left function application with flipped arguments)
 
     | 'let' x '=' e 'in' e          (let expression)
     | e ';' e                       (sequencing)
