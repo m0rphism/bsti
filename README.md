@@ -3,6 +3,18 @@
 Implementation of a typechecker and interpreter for the language from the paper
 *Borrowing from Session Types*.
 
+The implementation supports all features mentioned in the paper and additionally
+supports the following features:
+- unrestricted base types `String`, `Int`, and `Bool` with the usual operations;
+- unrestricted function types;
+- recursive function definitions and recursive session types;
+- irrefutable pattern matching in let expressions for products;
+- a function that prints to stdout.
+
+Note that the `spawn` expression differs from the paper in that it is call-by-need,
+and hence does not require you to wrap its subexpression in a lambda, e.g. instead of
+`spawn (λ(). e)` you can directly write `spawn e`.
+
 ## Dependencies
 
 - Rust ([Installation Tutorial](https://www.rust-lang.org/tools/install))

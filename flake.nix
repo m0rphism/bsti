@@ -1,5 +1,5 @@
 {
-  description = "Interpreter and typechecker for the language from the Law and Order for Typestate with Borrowing paper";
+  description = "Interpreter and typechecker for the language from the paper 'Borrowing from Session Types'";
 
   inputs = {
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -27,13 +27,13 @@
       CARGO_NET_GIT_FETCH_WITH_CLI = "true";
     in rec {
       packages = {
-        law-and-order = naerskLib.buildPackage {
-          name = "law-and-order";
+        bsti = naerskLib.buildPackage {
+          name = "bsti";
           src = ./.;
           inherit buildInputs LD_LIBRARY_PATH CARGO_NET_GIT_FETCH_WITH_CLI;
           nativeBuildInputs = nativeBuildInputs;
         };
-        default = packages.law-and-order;
+        default = packages.bsti;
       };
       devShells.default = pkgs.mkShell {
         inherit buildInputs LD_LIBRARY_PATH CARGO_NET_GIT_FETCH_WITH_CLI;
