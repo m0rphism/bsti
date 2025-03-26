@@ -155,7 +155,7 @@ We also provide unicode alternatives for certain tokens:
 
 Comments are started with a `#` and range until the end of the line.
 
-## Example
+## Examples
 
 The following shows the obligatory math server example:
 
@@ -210,3 +210,6 @@ let c1, c2 = new !Int.!Int.?Int.Close in
 fork (server c2);
 client c1
 ```
+
+Further examples, including the examples from the paper can be found in the
+`examples` subdirectory.
