@@ -626,6 +626,17 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::NewWithBorrowedType(e, _s) => {
+                report(
+                    &src,
+                    e.span.clone(),
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!("This expression creates a new channel with a borrowed session type. This is not allowed.",)
+                    )],
+                );
+            }
         },
         IErr::Eval(e) => match e {
             EvalError::ValMismatch(e, v_expected, v_actual) => {

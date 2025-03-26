@@ -302,7 +302,6 @@ impl Session {
     }
     pub fn split(&self, s1: &Session) -> Option<Self> {
         let r = self.split_(s1, &HashSet::new()).ok()?;
-        // TODO
         r
     }
     pub fn dual(&self) -> Self {
@@ -336,7 +335,7 @@ impl Session {
                     .collect();
                 Session::Choice(*op, cs2)
             }
-            Session::Return | Session::End(_) => s.clone(), // TODO
+            Session::Return | Session::End(_) => s.clone(),
             Session::Mu(x, s1) => Session::Mu(x.clone(), Box::new(fake_span(s1.join(s)))),
             Session::Var(x) => Session::Var(x.clone()),
         }

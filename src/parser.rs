@@ -23,8 +23,6 @@ peg::parser! {
 
         rule spanned<T>(t: rule<T>) -> Spanned<T>
             = start:position!() x:t() end:position!() {
-                // TODO: For some reason the position reporting in `peg_logos` doesn't work,
-                // so we use this workaround to convert token-spans to byte-spans ourself...
                 let start = toks.toks.get(start)
                         .map(|t| t.span.start)
                         .unwrap_or_else(|| toks.toks.last().unwrap().span.end);

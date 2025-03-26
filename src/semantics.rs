@@ -264,7 +264,7 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             let env1 = env.clone();
             let e1 = *e1.clone();
             std::thread::spawn(move || {
-                // TODO: error propagation
+                // TODO: better error messages.
                 eval_(&env1, &e1).unwrap();
             });
             Ok(Value::Const(Const::Unit))
@@ -488,9 +488,10 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
                     Const::Bool(*v1 || *v2)
                 }
                 _ => {
+                    // TODO: better error messages.
                     return Err(EvalError::ValMismatch(
                         e.clone(),
-                        format!("Operands do not fit operator"), // TODO
+                        format!("Operands do not fit operator"),
                         v1.clone(),
                     ));
                 }
@@ -502,7 +503,7 @@ pub fn eval_(env: &Env, e: &SExpr) -> Result<Value, EvalError> {
             let Value::Const(Const::Bool(b)) = &v1 else {
                 return Err(EvalError::ValMismatch(
                     e.clone(),
-                    format!("bool"), // TODO
+                    format!("bool"),
                     v1.clone(),
                 ));
             };

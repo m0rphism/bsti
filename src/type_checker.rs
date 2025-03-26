@@ -52,6 +52,7 @@ pub enum TypeError {
     MainReturnsOrd(SExpr, SType),
     WfSessionNotClosed(SSession, SId),
     WfSessionShadowing(SSession, SId),
+    NewWithBorrowedType(SExpr, SSession),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -418,7 +419,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
             let s = match &tx.val {
                 Type::Chan(s) => s,
                 _ => {
-                    // TODO
+                    // TODO: Better error messages.
                     return Err(TypeError::Mismatch(
                         e.clone(),
                         Err("Chan".to_owned()),
@@ -480,7 +481,7 @@ pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeErr
                 None => return Err(TypeError::UndefinedVariable(x.clone())),
             };
             // Assert that type of `x` is a channel
-            // TODO
+            // TODO: Better error messages.
             let err = Err(TypeError::Mismatch(
                 e.clone(),
                 Err("Chan ?t.s  (for some type t and session s)".to_owned()),
@@ -924,7 +925,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             assert_unr_ctx(&e, &ctx)?;
             check_wf_session(s)?;
             if !s.is_owned() {
-                // TODO
+                return Err(TypeError::NewWithBorrowedType(e.clone(), s.clone()));
             }
             let t = fake_span(Type::Prod(
                 fake_span(Mult::OrdR),
@@ -1178,8 +1179,9 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             }
 
             if !cc.is_left() && p1 == Eff::Yes {
+                // TODO: better error messages.
                 return Err(TypeError::MismatchEff(
-                    e.clone(), // TODO
+                    e.clone(),
                     fake_span(Eff::No),
                     fake_span(Eff::Yes),
                 ));

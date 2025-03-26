@@ -17,7 +17,6 @@ pub enum LexingError {
 
 pub type LexerError = Spanned<LexingError>;
 
-// TODO
 impl Display for LexingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:?}", self)
