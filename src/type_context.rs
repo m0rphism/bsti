@@ -339,9 +339,6 @@ impl Ctx {
         self.flatmap_binds(&mut |x, t| {
             if let Some(s1) = sis.get(&x) {
                 if let Type::Chan(s) = &t {
-                    println!("Trying to split");
-                    println!("  {}", pretty_def(s));
-                    println!("  {}", pretty_def(s1));
                     if let Some(s2) = s.split(s1) {
                         return Ctx::Join(
                             Box::new(Ctx::Bind(
