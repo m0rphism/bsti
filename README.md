@@ -15,11 +15,40 @@ Note that the `spawn` expression differs from the paper in that it is call-by-ne
 and hence does not require you to wrap its subexpression in a lambda, e.g. instead of
 `spawn (λ(). e)` you can directly write `spawn e`.
 
-## Dependencies
+## Installation
 
-- Rust ([Installation Tutorial](https://www.rust-lang.org/tools/install))
+### Docker
 
-## Usage
+1.  Build the image via
+
+    ```bash
+    docker-compose build
+    ```
+
+2.  Run the image via
+
+    ```bash
+    docker-compose run bsti
+    ```
+
+    This drops you into an interactive bash shell, where the compiled
+    interpreter `bsti` is already on the `PATH`.
+
+3.  Typecheck and interpret a program via e.g.
+
+    ```bash
+    bsti examples/example-simple.bgv
+    ```
+
+    The current host directory is mounted into the current guest directory, so
+    it is possible to change or add examples on the host without having
+    to rebuild the image.
+
+### From Source
+
+Install a recent version of stable rust. See the following URL for instructions:
+
+https://www.rust-lang.org/tools/install
 
 The following command will compile the project and its dependencies (if necessary), and then
 typecheck and run the file `SOURCE_FILE`:
