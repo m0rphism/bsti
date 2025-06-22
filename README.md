@@ -5,15 +5,20 @@ Implementation of a typechecker and interpreter for the language from the paper
 
 The implementation supports all features mentioned in the paper and additionally
 supports the following features:
+
 - unrestricted base types `String`, `Int`, and `Bool` with the usual operations;
+
 - unrestricted function types;
+
 - recursive function definitions and recursive session types;
+
 - irrefutable pattern matching in let expressions for products;
+
 - a function that prints to stdout.
 
-Note that the `spawn` expression differs from the paper in that it is call-by-need,
-and hence does not require you to wrap its subexpression in a lambda, e.g. instead of
-`spawn (λ(). e)` you can directly write `spawn e`.
+Note that the `spawn` expression differs from the paper in that it is
+call-by-need, and hence does not require you to wrap its subexpression in a
+lambda, e.g. instead of `spawn (λ(). e)` you can directly write `spawn e`.
 
 ## Installation
 
@@ -41,8 +46,8 @@ and hence does not require you to wrap its subexpression in a lambda, e.g. inste
     ```
 
     The current host directory is mounted into the current guest directory, so
-    it is possible to change or add examples on the host without having
-    to rebuild the image.
+    it is possible to change or add examples on the host without having to
+    rebuild the image.
 
 ### From Source
 
@@ -50,8 +55,8 @@ Install a recent version of stable rust. See the following URL for instructions:
 
 https://www.rust-lang.org/tools/install
 
-The following command will compile the project and its dependencies (if necessary), and then
-typecheck and run the file `SOURCE_FILE`:
+The following command will compile the project and its dependencies (if necessary),
+and then typecheck and run the file `SOURCE_FILE`:
 
 ```bash
 cargo run -- SOURCE_FILE
@@ -60,7 +65,7 @@ cargo run -- SOURCE_FILE
 ## Syntax
 
 The following grammar describes the complete, concrete syntax supported by the interpreter.
-For readability, operator precedence and associativity is omitted.
+For readability, operator precedence, associativity and whitespace are omitted.
 
 ```
 Multiplicities
@@ -176,10 +181,15 @@ P ::= e                             (main expression)
 ```
 
 We also provide unicode alternatives for certain tokens:
+
 - A lambda `\x. e` can also be written as `λx. e`
+
 - A function type `t1 -[ m E ]-> t2` can also be written as `t1 –[ m E ]→ t2`
+
 - An unordered product type `t1 *[ p ] t2` can also be written as `t1 ⊗ t2`
+
 - A left-ordered product type `t1 *[ l ] t2` can also be written as `t1 ⊙ t2`
+
 - A recursive session type `mu x. s` can also be written as `µ x. s`
 
 Comments are started with a `#` and range until the end of the line.
