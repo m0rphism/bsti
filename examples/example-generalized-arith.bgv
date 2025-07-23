@@ -1,0 +1,42 @@
+let
+  general : (?Int. !Int. Return -[ u 1 ]-> Unit)
+  -[ u 0]-> (?Int. ?Int. !Int. Return -[ u 1 ]-> Unit)
+  -[ u 0]-> &{BIN: ?Int. ?Int. !Int. Close, UN: ?Int. !Int. Close}
+  -[ p 1 ]-> Unit
+  general un bin c0 =
+    case offer c0 {
+      UN  c -> { un &c ; close c }
+      BIN c -> { bin &c ; close c }
+    }
+in let
+   unf : (Int -[ u 0 ]-> Int) -[ u 0 ]->
+         ?Int. !Int. Return -[ u 1 ]->
+	 Unit
+   unf f c = let r = f (recv &c) in send r c
+#   unf f c = send (f (recv &c)) c
+in let
+   neg : ?Int. !Int. Return -[ u 1 ]-> Unit
+   neg c = unf (\x. 0 - x) c
+in let
+   dup : ?Int. !Int. Return -[ u 1 ]-> Unit
+   dup c = unf (\x. 2*x) c
+in let
+   binf : (Int -[ u 0 ]-> Int -[ u 0 ]-> Int) -[ u 0 ]-> ?Int. ?Int. !Int. Return -[ u 1 ]-> Unit
+   binf f c = let r = f (recv &c) (recv &c) in send r c
+in let
+   add : ?Int. ?Int. !Int. Return -[ u 1 ]-> Unit
+   add c = binf (\x. \y. x + y) c
+in let
+   add_client : Int -[ u 0 ]-> Int -[ u 0 ]->
+  	        +{BIN: !Int. !Int. ?Int. Wait, UN: !Int. ?Int. Wait} -[ u 1 ]-> Int
+   add_client x y c =
+     select BIN &c ;
+     send x &c ;
+     send y &c ;
+     let r = recv &c in
+     wait c ;
+     r
+in
+  let c , d = new &{BIN: ?Int. ?Int. !Int. Close, UN: ?Int. !Int. Close} in
+  fork (print (add_client 17 4 d)) ;
+  general neg add c

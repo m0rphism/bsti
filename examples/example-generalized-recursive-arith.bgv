@@ -1,0 +1,48 @@
+let
+  general : (?Int. !Int. Return -[ u 1 ]-> Unit)
+  -[ u 0]-> (?Int. ?Int. !Int. Return -[ u 1 ]-> Unit)
+  -[ u 0]-> mu x . &{BIN: ?Int. ?Int. !Int. x, UN: ?Int. !Int. x, QUIT: Close}
+  -[ u 1 ]-> Unit
+  general un bin c0 =
+    case offer c0 {
+      UN  c -> { un &c ; general un bin c }
+      BIN c -> { bin &c ; general un bin c }
+      QUIT c -> { close c }
+    }
+in let
+   unf : (Int -[ u 0 ]-> Int) -[ u 0 ]-> ?Int. !Int. Return -[ u 1 ]-> Unit
+   unf f c = let r = f (recv &c) in send r c
+in let
+   neg : ?Int. !Int. Return -[ u 1 ]-> Unit
+   neg c = unf (\x. 0 - x) c
+in let
+   dup : ?Int. !Int. Return -[ u 1 ]-> Unit
+   dup c = unf (\x. 2*x) c
+in let
+   binf : (Int -[ u 0 ]-> Int -[ u 0 ]-> Int) -[ u 0 ]-> ?Int. ?Int. !Int. Return -[ u 1 ]-> Unit
+   binf f c = let r = f (recv &c) (recv &c) in send r c
+in let
+   add : ?Int. ?Int. !Int. Return -[ u 1 ]-> Unit
+   add c = binf (\x. \y. x + y) c
+in let
+   bin_client : Int -[ u 0 ]-> Int -[ u 0 ]->
+  	        (mu x . +{BIN: !Int. !Int. ?Int. Return, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]-> Int
+   bin_client x y c =
+     select BIN &c ;
+     send x &c ;
+     send y &c ;
+     let r = recv &c in
+     r
+in let
+   many_bin_clients : Int -[ u 0 ]->
+                      (mu list . &{CONS: ?Int. list, NIL: Wait}) -[ u 0 ]->
+                      (mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]->
+		      Int
+   many_bin_clients n cl c =
+     case offer cl  {
+       CONS cl1 -> { let r = bin_client n (recv &cl1) &c in
+                     many_bin_clients r cl1 c }
+       NIL cl1 -> { wait cl1 ; select QUIT &c ; wait c ; n }
+     }
+in
+unit
