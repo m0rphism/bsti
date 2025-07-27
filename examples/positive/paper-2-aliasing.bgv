@@ -1,0 +1,25 @@
+# Example from our paper
+
+# This file illustrates how our borrowing implementation supports aliasing.
+
+# Consider the following forwarding function, which takes two channel ends,
+# receives an integer on the first, and sends the integer on the second:
+
+let
+  forward : ?Int. Return -[ u 0 ]-> !Int. Return -[ r 1 ]-> Unit
+  forward c d =
+    let snd : Int -[ l 1 ]-> Unit
+        snd x = send x d in
+    let y = recv c in
+    y |> snd
+in
+
+# Our language allows to use the `forward` function with aliasing, i.e. it is
+# possible to call `forward` with the same channel end for both arguments:
+
+let
+  example : ?Int. !Int. Return -[ u 1 ]-> Unit
+  example c = forward &c &c; drop c
+in
+
+unit

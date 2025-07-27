@@ -53,6 +53,8 @@ pub enum TypeError {
     WfSessionNotClosed(SSession, SId),
     WfSessionShadowing(SSession, SId),
     NewWithBorrowedType(SExpr, SSession),
+    CaseDifferentBranchUsageMaps(SExpr, String, Rep, String, Rep),
+    IfDifferentBranchUsageMaps(SExpr, Rep, Rep),
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -540,6 +542,29 @@ pub fn infer_select_arg(ctx: &Ctx, e: &SExpr, l: &SLabel) -> Result<(SType, Rep,
     }
 }
 
+pub fn indented(n: usize, s: impl AsRef<str>) -> String {
+    let mut out = String::new();
+    for l in s.as_ref().lines() {
+        for _ in 0..n {
+            out += " ";
+        }
+        out += l;
+    }
+    out
+}
+
+// pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
+//     println!("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––");
+//     println!("Inferring expression: \n{}", indented(2, pretty_def(e)));
+//     println!("Ctx: \n{}", indented(2, pretty_def(ctx)));
+//     let res = infer_(ctx, e);
+//     println!("Finished expression: \n{}", indented(2, pretty_def(e)));
+//     // println!("Result: \n{}", indented(2, format!("{res:?}")));
+//     println!("Result: {}", res.is_ok());
+//     println!("– – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – – ");
+//     res
+// }
+
 pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
@@ -703,6 +728,14 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
 
+            println!(
+                "compute_ctx_ctx(\n  e=\n{}\n  u1=\n{}\n  fvs1=\n{}\n  fvs2=\n{}\n  ctx=\n{}\n)",
+                indented(4, pretty_def(e)),
+                indented(4, format!("{u1:?}")),
+                indented(4, format!("{fvs1:?}")),
+                indented(4, format!("{fvs2:?}")),
+                indented(4, pretty_def(ctx)),
+            );
             let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if cc.vars().contains(&x.val) {
@@ -848,15 +881,15 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 cs_zip.push((l, x, e, t));
             }
 
-            let mut out: Option<(SType, Rep, Eff)> = None;
-            for (_, x_, e_, t_) in &cs_zip {
+            let mut out: Option<(String, SType, Rep, Eff)> = None;
+            for (l, x_, e_, t_) in &cs_zip {
                 let c_ = cc.fill(Ctx::Bind((*x_).clone(), (*t_).clone()));
                 let (t2_, u2_, p2_) = infer(&c_, e_)?;
 
                 // Assert that channel arguments are used up.
-                if_chan_then_used(&e_, &t2_, &u2_, &x_)?;
+                if_chan_then_used(&e_, &t_, &u2_, &x_)?;
 
-                if let Some((t2, u2, p2)) = &mut out {
+                if let Some((l2, t2, u2, p2)) = &mut out {
                     if *t2 != t2_ {
                         return Err(TypeError::CaseClauseTypeMismatch(
                             e.clone(),
@@ -865,12 +898,24 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                         ));
                     }
                     *p2 = Eff::lub(*p2, p2_);
-                    check_rep_eq(&e, &u2, &u2_.remove(x_))?;
+
+                    let c_check = cc.fill(Ctx::Empty);
+                    let c1 = c_check.split_off(&u2_);
+                    let c2 = c_check.split_off(&u2);
+                    if !(c1.is_subctx_of(&c2) && c2.is_subctx_of(&c1)) {
+                        return Err(TypeError::CaseDifferentBranchUsageMaps(
+                            e.clone(),
+                            l2.clone(),
+                            u2.clone(),
+                            l.val.clone(),
+                            u2_.clone(),
+                        ));
+                    }
                 } else {
-                    out = Some((t2_, u2_.remove(x_), p2_))
+                    out = Some((l.val.clone(), t2_, u2_.remove(x_), p2_))
                 }
             }
-            let (t2, u2, p2) = out.unwrap();
+            let (_l2, t2, u2, p2) = out.unwrap();
 
             check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
@@ -904,7 +949,19 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     t3.clone(),
                 ));
             }
-            check_rep_eq(&e, &u2, &u3)?;
+
+            {
+                let c_check = cc.fill(Ctx::Empty);
+                let c1 = c_check.split_off(&u2);
+                let c2 = c_check.split_off(&u3);
+                if !(c1.is_subctx_of(&c2) && c2.is_subctx_of(&c1)) {
+                    return Err(TypeError::IfDifferentBranchUsageMaps(
+                        e.clone(),
+                        u2.clone(),
+                        u3.clone(),
+                    ));
+                }
+            }
 
             check_split_alg_gen(e, &u1, &u2, &fvs1, &fvs2, ctx, &c1, &cc)?;
 
@@ -1156,7 +1213,11 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let (mut u1, mut p1) = check(&ctx_body, &c.val.body, &ret_ty)?;
             if let Some(ret_eff) = ret_eff {
                 if !Eff::leq(p1, ret_eff.val) {
-                    Err(TypeError::MismatchEffSub(e.clone(), fake_span(p1), ret_eff))?
+                    Err(TypeError::MismatchEffSub(
+                        c.val.body.clone(),
+                        ret_eff,
+                        fake_span(p1),
+                    ))?
                 }
             }
             for p in &c.pats {

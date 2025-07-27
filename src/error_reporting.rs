@@ -2,6 +2,7 @@ use std::{collections::HashSet, ops::Range};
 
 use crate::{
     lexer::LexerError,
+    rep::Rep,
     semantics::EvalError,
     type_checker::TypeError,
     util::{pretty::pretty_def, span::Span},
@@ -442,6 +443,54 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     )],
                 );
             }
+            TypeError::CaseDifferentBranchUsageMaps(e, l1, r1, l2, r2) => {
+                let pretty_rep = |r: &Rep| {
+                    let mut s = String::new();
+                    for (x, t) in &r.map {
+                        s += &format!("  {} : {}\n", x, pretty_def(t));
+                    }
+                    s
+                };
+                report(
+                    &src,
+                    e.span.clone(),
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "This case expression uses channels inconsistently in the branches for '{}' and '{}'.\nThe usage map for the branch for '{}' is:\n{}\nThe usage map for the branch for '{}' is:\n{}",
+                            l1,
+                            l2,
+                            l1,
+                            pretty_rep(&r1),
+                            l2,
+                            pretty_rep(&r2),
+                        ),
+                    )],
+                );
+            }
+            TypeError::IfDifferentBranchUsageMaps(e, r1, r2) => {
+                let pretty_rep = |r: &Rep| {
+                    let mut s = String::new();
+                    for (x, t) in &r.map {
+                        s += &format!("  {} : {}\n", x, pretty_def(t));
+                    }
+                    s
+                };
+                report(
+                    &src,
+                    e.span.clone(),
+                    "Type Error",
+                    [label(
+                        e.span,
+                        format!(
+                            "This if-expression uses channels inconsistently across its branches.\nThe usage map for the true-branch is:\n{}\nThe usage map for the false-branch is:\n{}",
+                            pretty_rep(&r1),
+                            pretty_rep(&r2),
+                        ),
+                    )],
+                );
+            }
             TypeError::CaseMissingLabel(e, t, l) => {
                 report(
                     &src,
@@ -487,7 +536,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!(
-                            "Clause expressions have different types: '{}' is not equal to '{}'.",
+                            "The branches have different types: '{}' is not equal to '{}'.",
                             pretty_def(&t1),
                             pretty_def(&t2)
                         ),
@@ -502,7 +551,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                     [label(
                         e.span,
                         format!(
-                            "Clause expressions use variable '{}' of session type in different ways: '{}' is not the same as {}.",
+                            "The branches use variable '{}' of session type in different ways: '{}' is not the same as {}.",
                             x,
                             pretty_def(&s1),
                             if let Some(s2) = s2 {

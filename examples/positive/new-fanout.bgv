@@ -1,0 +1,57 @@
+# Code from google docs:
+# .
+# List = rec X . +{ NIL: end, CONS: !int. X }
+# .
+# Forward : ?int.ret → !int.ret → ()
+# Forward cin cout = send cin (read cout)
+# 
+# Fanout : dual (List) → List → List → ()
+# Fanout cin cout1 cout2 n = case cin of
+#     NIL cin → wait cin; select NIL cout1; close cout1; select NIL cout2; close cout2
+#     CONS cin → If even n then select CONS &cout1; forward &cin &cout1
+#                                         else select CONS &cout2; forward &cin &cout2;
+#                          Fanout cin cout1 cout2 (n+1)
+# .
+# Forward’ : ?int.ret → +{CONS: !int.ret} → ()
+# Forward’ cin cout = select CONS &cout; send cin (read cout)
+# .
+# Fanout’ : dual (List) → List → List → ()
+# Fanout’ cin cout1 cout2 n = case cin of
+#     NIL cin → wait cin; select NIL cout1; close cout1; select NIL cout2; close cout2
+#     CONS cin → If even n then forward’ &cin &cout1
+#                                         else forward’ &cin &cout2;
+#                          Fanout’ cin cout1 cout2 (n+1)
+
+let
+  forward : ?Int.Return -[ u 0 ]→ !Int.Return -[ p 1 ]→ Unit
+  forward cout cin = send (recv cout) cin
+in
+
+let
+  fanout : Bool -[ u 0 ]→
+           (mu X . &{ NIL: wait, CONS: !Int.X }) *[p]
+           (mu X . +{ NIL: close, CONS: ?Int.X }) *[p]
+           (mu X . +{ NIL: close, CONS: ?Int.X }) -[ u 1 ]→
+           Unit
+  fanout b (cout, (cin1, cin2)) = case offer cout {
+    NIL cout1 → {
+      wait cout1;
+      select NIL &cin1;
+      close cin1;
+      select NIL &cin2;
+      close cin2
+    }
+    CONS cout1 → {
+      if b then
+        select CONS &cin1;
+        forward &cin1 &cout1;
+        fanout (!b) (cout1, (cin1, cin2))
+      else
+        select CONS &cin2;
+        forward &cin2 &cout1;
+        fanout (!b) (cout1, (cin1, cin2))
+    }
+  }
+in
+
+unit

@@ -1,0 +1,25 @@
+# This file contains a desugared form of `math-server-1-send-and-recv.bgv`,
+# where function definitions have been replaced by `let`-expressions and
+# lambda-abstractions as in the paper's core calculus.
+
+let 
+  server = \c.
+    let x = recv &c in
+    let y = recv &c in
+    send (x + y) &c;
+    wait c
+  : ?Int.?Int.!Int.Wait -[ u 1 ]→ Unit
+in
+
+let
+  client = \c.
+    send 1 &c;
+    send 2 &c;
+    print (recv &c);
+    close c
+  : !Int.!Int.?Int.Close -[ u 1 ]→ Unit
+in
+
+let c1, c2 = new !Int.!Int.?Int.Close in
+fork (server c2);
+client c1

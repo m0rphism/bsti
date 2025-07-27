@@ -1,0 +1,11 @@
+# Example from our paper
+
+let
+  threads : ?Int. ?String. Close -[ u 1 ]-> Unit
+  threads c =
+    let _ = fork (let i = 17 + recv &c in unit) in
+    let n = "" + (recv &c) in
+    close c
+in
+
+unit

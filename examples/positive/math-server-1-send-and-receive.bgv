@@ -1,0 +1,36 @@
+# This file illustrates how basic channel communication works via the example
+# of a little arithmetics server, which receives and integer and send its
+# negated value back.
+
+# Both the `server` and the `client` are modeled as functions, which are
+# called with their corresponding channel end.
+
+# The `server` function takes a channel end and first receives an integer, and
+# then sends the negated integer back, and waits for the client to close the
+# channel:
+
+let 
+  server : ?Int.!Int.Wait -[ u 1 ]→ Unit
+  server c =
+    let x = recv &c in
+    send (0 - x) &c;
+    wait c
+in
+
+# The `client` function takes a channel end and first sends the integer `42`,
+# then receives the negated integer `-42`, prints it, and closes the channel end:
+
+let
+  client : !Int.?Int.Close -[ u 1 ]→ Unit
+  client c =
+    send 42 &c;
+    print (recv &c);  # This will print `-42`.
+    close c
+in
+
+# The `new` keyword allows to create a new pair of channel ends,
+# which are then used to call the `server` and `client` functions, respectively:
+
+let c1, c2 = new !Int.?Int.Close in
+fork (server c2);
+client c1

@@ -1,0 +1,42 @@
+# This file illustrates recursive session types by extending the math server
+# from `math-server-3-choice.bgv` such that it allows clients to execute
+# arbitrary many operations.
+
+# Type aliases are currently not supported, so recursive types have to be
+# written directly as mu-types, e.g. `mu x. !Int.x` for an infinite stream of
+# integers.
+
+# Functions do however supports recursion, so an explicit fixpoint combinator
+# for expressions is not necessary.
+
+let 
+  server : Int -[ u 1 ]→
+           µ x. &{next: ?Int.x, done: !Int.Wait} -[ u 1 ]→
+           Unit
+  server acc c =
+    case (offer c) {
+      next c1 → {
+        server (acc + recv &c1) c1
+      }
+      done c1 → {
+        send acc &c1;
+        wait c1
+      }
+    }
+in
+
+let
+  client : µ x. +{next: !Int.x, done: ?Int.Close} -[ u 1 ]→ Unit
+  client c =
+    select next &c;
+    send 1 &c;
+    select next &c;
+    send 2 &c;
+    select done &c;
+    print (recv &c);
+    close c
+in
+
+let c1, c2 = new (µ x. +{next: !Int.x, done: ?Int.Close}) in
+fork (server 0 c2);
+client c1

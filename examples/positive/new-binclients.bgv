@@ -1,0 +1,158 @@
+## Uncurried
+
+let
+  bin_client :
+    Int -[ u 0 ]-> Int -[ u 0 ]->
+    +{BIN: !Int. !Int. ?Int. Return} -[ u 1 ]-> Int
+  bin_client x y c =
+    select BIN &c ;
+    send x &c ;
+    send y &c ;
+    let r = recv &c in
+    r
+in
+
+let
+  many_bin_clients :
+    Int -[ u 0 ]->
+    (mu list . &{CONS: ?Int. list, NIL: Wait}) *[ p ]
+    (mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]->
+    Int
+  many_bin_clients n (cl, c) =
+    case offer cl  {
+      CONS cl1 -> {
+        let r = bin_client n (recv &cl1) &c in
+        many_bin_clients r (cl1, c)
+      }
+      NIL cl1 -> {
+        wait cl1;
+        select QUIT &c;
+        wait c;
+        n 
+      }
+    }
+in
+
+unit
+
+## Original ####################################################################
+
+#let
+#  bin_client :
+#    Int -[ u 0 ]-> Int -[ u 0 ]->
+#    +{BIN: !Int. !Int. ?Int. Return} -[ u 1 ]-> Int
+#  bin_client x y c =
+#    select BIN &c ;
+#    send x &c ;
+#    send y &c ;
+#    let r = recv &c in
+#    r
+#in let
+#  many_bin_clients :
+#    Int -[ u 0 ]->
+#    (mu list . &{CONS: ?Int. list, NIL: Wait}) -[ u 0 ]->
+#    mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait} -[ u 1 ]->
+#    Int
+#  many_bin_clients n cl c =
+#    case offer cl  {
+#      CONS cl1 -> {
+#        let r = bin_client n (recv &cl1) &c in
+#        many_bin_clients r cl1 c
+#      }
+#      NIL cl1 -> {
+#        wait cl1;
+#        select QUIT &c;
+#        wait c;
+#        n 
+#      }
+#    }
+#in
+#unit
+
+# 20 │ ╭─▶         let r = bin_client n (recv &cl1) &c in
+# 21 │ ├─▶         many_bin_clients r cl1 c
+#    │ │
+#    │ ╰────────────────────────────────────── In this expression, failed to split context
+# (
+#   (
+#     (
+#       (
+#         bin_client : Int –[unr; 0]→ Int –[unr; 0]→ Chan +{BIN: !Int. !Int. ?Int. return} –[unr; 1]→ Int ,
+#         many_bin_clients : Int –[unr; 0]→
+#                            Chan (µ list. &{CONS: ?Int. list, NIL: wait}) –[unr; 0]→
+#                            Chan (µ x. +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: wait}) –[unr; 1]→
+#                            Int
+#       ),
+#       n : Int
+#     ),
+#     (
+#       cl1::1 : Chan (?Int. return),
+#       cl1::2 : Chan (µ list. &{CONS: ?Int. list, NIL: wait})
+#     )
+#   ),
+#   (
+#     c::1 : Chan +{BIN: !Int. !Int. ?Int. return},
+#     c::2 : Chan (µ x. +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: wait})
+#   )
+# )
+# by free variables {bin_client, c, c::1, cl1, cl1::1, n}
+# 
+# The free variable c and cl1 are used at wrong indices, e.g. cl1 and cl1::1, maybe that's the problem?
+
+
+# compute_ctx_ctx(
+#   e=
+#     let r = bin_client n (recv &cl1) &c in many_bin_clients r cl1 c
+#   u1=
+#     cl1: ?Int.Return, c: +{BIN: !Int.!Int.?Int.Return
+#   fvs1=
+#     n, c, cl1, bin_client
+#   fvs2=
+#     c, cl1, r, many_bin_clients
+#   ctx=
+#     (
+#       (
+#         (
+#           (
+#             bin_client : Int –[unr; 0]→ Int –[unr; 0]→ Chan +{BIN: !Int. !Int. ?Int. return} –[unr; 1]→ Int
+#           ,
+#             many_bin_clients : Int –[unr; 0]→ Chan (µ list. &{CONS: ?Int. list, NIL: wait}) –[unr; 0]→
+#                              Chan (µ x. +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: wait}) –[unr; 1]→
+#                              Int
+#           )
+#         , n : Int
+#         )
+#       , cl1 : Chan (?Int. µ list. &{CONS: ?Int. list, NIL: wait})
+#       )
+#     ,
+#       c : Chan (µ x. +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: wait})
+#     )
+
+
+
+
+# Das Subtyping scheint interessante Interaktion mit der choice-types und den usage maps zu zeigen.
+# Das tritt zum Beispiel bei der Typ-Regel für Variant-Elimination (case) auf.
+# Ohne Subtyping habe ich hier gefordert, dass alle clause bodies die gleiche usage map haben müssen,
+# d.h. die 
+# 
+# Eventuell war das schon bei choice types ohne rekursion falsch.
+# Annahme: 
+# 
+#   x : +{l1: s1, l2: s2}
+# 
+# case foo {
+#   l3 bar -> { select l1 &x; ... }
+#   l4 baz -> { select l2 &x; ... }
+# }
+# 
+# Wegen dem subtyping bekommen wir den borrowings `&x` die usage maps:
+#   { x -> +{l1: s1} }
+# und
+#   { x -> +{l2: s2} }
+# 
+# Die sind nicht gleich - auch nicht semantisch - sondern nur "joinable"
+# 
+# Das ganze macht den Kalkül nicht falsch, aber weniger ausdrucksstark für choice types.
+# 
+# 

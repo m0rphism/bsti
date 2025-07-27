@@ -1,3 +1,5 @@
+# Example from our paper
+
 let
   sum_avr : Int -[u 0]->
             Int -[u 0]->
@@ -9,7 +11,9 @@ let
       Sum c  -> { drop c; s }
       Avr c  -> { drop c; s / n }
     }
-in let
+in
+
+let
   main : ?Int. mu X. &{Next: ?Int. X, Sum: !Int.Close, Avr: !Int.Close} -[u 1]-> Unit
   main c =
     let x0 = recv &c in
@@ -17,4 +21,5 @@ in let
     send v &c ;
     close c
 in
+
 unit

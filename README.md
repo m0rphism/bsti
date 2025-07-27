@@ -1,7 +1,7 @@
 # Borrowing from Session Types
 
-Implementation of a typechecker and interpreter for the language from the paper
-*Borrowing from Session Types*.
+This repository contains an implementation of a typechecker and interpreter
+for the language from the paper *Borrowing from Session Types*.
 
 The implementation supports all features mentioned in the paper and additionally
 supports the following features:
@@ -42,7 +42,7 @@ lambda, e.g. instead of `spawn (λ(). e)` you can directly write `spawn e`.
 3.  Typecheck and interpret a program via e.g.
 
     ```bash
-    bsti examples/example-simple.bgv
+    bsti examples/positive/example-simple.bgv
     ```
 
     The current host directory is mounted into the current guest directory, so
@@ -124,6 +124,8 @@ e ::= x                             (variable)
     | 'new' s                       (channel allocation)
     | 'send' e1 e2                  (channel send operation)
     | 'recv' e                      (channel receive operation)
+    | 'offer' e                     (external choice operation)
+    | 'select' l e                  (internal choice operation)
     | 'drop' e                      (elimination of borrowed channels)
     | 'close' e                     (elimination of owned channels)
     | 'wait' e                      (elimination of owned channels)

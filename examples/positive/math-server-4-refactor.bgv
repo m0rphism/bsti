@@ -1,0 +1,38 @@
+# This file contains a refactoring of `math-server-3-choice.bgv`, where the
+# `server` function avoids code duplication by sending the result after the
+# `case` expression on the math operation.
+
+# Changed lines are highlighted in comments.
+
+let
+  client : +{ neg: !Int.?Int.Close, add: !Int.!Int.?Int.Close } -[ u 1 ]→ Unit
+  client c =
+    select neg &c;
+    send 42 &c;
+    let y = recv &c in
+    print y;
+    close c
+in
+
+let
+  server : &{ neg: ?Int.!Int.Wait, add: ?Int.?Int.!Int.Wait } -[ u 1 ]→ Unit
+  server c =
+    let c2, z = case offer c {
+      add c1 -> {
+        let x = recv &c1 in
+        let y = recv &c1 in
+        (c1, x + y)               # CHANGED
+      }
+      neg c1 -> {
+        let x = recv &c1 in
+        (c1, 0 - x)               # CHANGED
+      }
+    } in
+    send z &c2;                   # CHANGED
+    wait c2
+in
+
+let c1, c2 = new +{ neg: !Int.?Int.Close, add: !Int.!Int.?Int.Close } in
+fork (server c2);
+client c1
+

@@ -1,3 +1,5 @@
+# Example from our paper
+
 let
   calculate : &{Add: ?Int. ?Int. Return, Neg: ?Int. Return} -[ u 1 ]-> Int
   calculate c0 =

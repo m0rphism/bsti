@@ -1,0 +1,27 @@
+# Code from google docs:
+# .
+# Arith = rec X . &{ UN: ?int.!int.X, BIN: ?int.?int.!int.X, QUIT }
+# .
+# Unary =  ?int.!int.ret → ()
+# .
+# Binary = ?int.?int.!int.ret → ()
+# .
+# F : Unary → Binary → Arith →  ()
+# F un bin c = case c of
+# 	UN c → un &c; F un bin c
+#             BIN c → bin &c; F un bin c
+#             QUIT → ()
+
+let
+  F : (?Int.!Int.Return -[ u 0 ]→ Unit) -[ u 0 ]→
+      (?Int.?Int.!Int.Return -[ u 0 ]→ Unit) -[ u 0 ]→
+      (mu X. &{ UN: ?Int.!Int.X, BIN: ?Int.?Int.!Int.X, QUIT: Wait }) -[ u 1 ]→
+      Unit
+  F un bin c = case offer c {
+    UN   c1 → { un &c1;  F un bin c1 }
+    BIN  c1 → { bin &c1; F un bin c1 }
+    QUIT c1 → { wait c1 }
+  }
+in
+
+unit

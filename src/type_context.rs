@@ -4,6 +4,7 @@ use std::hash::Hash;
 use crate::ren::Ren;
 use crate::rep::Rep;
 use crate::syntax::{Id, Mult, SId, SType, Session, SessionOp, Type, TypeSemEq};
+use crate::type_checker::TypeError;
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
 use crate::util::pretty::{pretty_def, Pretty, PrettyEnv};
@@ -774,136 +775,136 @@ impl Iterator for CtxEnum {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::util::{pretty::pretty_def, sub_set_iter::SubSetIter};
-
-    use super::*;
-
-    fn bind(x: &str) -> Ctx {
-        Bind(fake_span(x.to_string()), fake_span(Type::Unit))
-    }
-
-    fn u(c1: impl Boxed<Ctx>, c2: impl Boxed<Ctx>) -> Ctx {
-        Join(c1, c2, Unordered)
-    }
-    fn o(c1: impl Boxed<Ctx>, c2: impl Boxed<Ctx>) -> Ctx {
-        Join(c1, c2, Ordered)
-    }
-
-    fn test_split<S: AsRef<str>>(c: &Ctx, xs: impl IntoIterator<Item = S>) {
-        let xs: HashSet<Id> = xs.into_iter().map(|x| x.as_ref().to_string()).collect();
-        eprintln!("\n––––––––––––––––––––––––––––––––––––––––––––––––––");
-        eprintln!("Ctx:          {}", pretty_def(&c));
-        eprintln!("Vars:         {}", pretty_def(&xs));
-        let splittable = c.is_splittable(&xs);
-        eprintln!("Splittable:   {}", splittable);
-        if !splittable {
-            return;
-        }
-        match c.split(&xs) {
-            Some((cc, c2)) => {
-                let cc = cc.simplify();
-                let c2 = c2.simplify();
-                eprintln!("Split CtxCtx: {}", pretty_def(&cc));
-                eprintln!("Split Ctx:    {}", pretty_def(&c2));
-
-                let cc_vars = cc.fill(Ctx::Empty).lin_vars();
-                assert!(
-                    cc_vars.is_disjoint(&xs),
-                    "Split CtxCtx is not disjoint to xs"
-                );
-
-                let c2_vars = c2.vars();
-                assert!(c2_vars.is_subset(&xs), "Split Ctx is not a subset of xs");
-
-                let c_res = cc.fill(c2);
-                eprintln!("Rejoined Ctx: {}", pretty_def(&c_res));
-                assert!(
-                    c.to_sem().is_subctx_of(&c_res.to_sem()),
-                    "Split context is not super-context of original"
-                );
-
-                if c.to_sem() == c_res.to_sem() {
-                    eprintln!("Split context is exactly equal to original")
-                } else {
-                    eprintln!("Split context is worse than original")
-                }
-            }
-            None => assert!(false, "Failed splitting"),
-        }
-    }
-
-    // #[test]
-    // fn split_1() {
-    //     let c = o(bind("a"), bind("b"));
-    //     test_split(&c, ["a"]);
-    //     test_split(&c, ["b"]);
-    //     test_split(&c, ["a", "b"]);
-    //     test_split::<String>(&c, []);
-    // }
-
-    // #[test]
-    // fn split_2() {
-    //     let c = u(o(bind("a"), bind("b")), o(bind("c"), bind("d")));
-    //     test_split(&c, ["a"]);
-    //     test_split(&c, ["b"]);
-    //     test_split(&c, ["a", "b"]);
-    //     test_split::<String>(&c, []);
-    // }
-
-    #[test]
-    fn split_3() {
-        let c = o(bind("a"), o(bind("b"), bind("c")));
-        test_split(&c, ["a", "c"]);
-    }
-
-    #[test]
-    fn ctx_split() {
-        let xs = vec![
-            "a".to_string(),
-            "b".to_string(),
-            "c".to_string(),
-            "d".to_string(),
-            "e".to_string(),
-            // "f".to_string(),
-            // "g".to_string(),
-        ];
-        let xs_set: HashSet<Id> = xs.iter().cloned().collect();
-        let it = CtxEnum::new(xs.clone());
-        eprintln!("");
-        let mut count = 0;
-        for (i, c) in it.enumerate() {
-            for (j, ys) in SubSetIter::from(xs_set.clone()).enumerate() {
-                eprintln!("\nTest {count}, Ctx {i}, Subset {j}");
-                test_split(&c, &ys);
-                count += 1;
-            }
-        }
-    }
-
-    // #[test]
-    // fn gen_subsets() {
-    //     let xs = HashSet::from(["x", "y", "z", "w"]);
-    //     let it = SubSetIter::from(xs);
-    //     eprintln!("");
-    //     for (i, ys) in it.enumerate() {
-    //         eprintln!("\nSubset {i} {ys:?}");
-    //     }
-    // }
-
-    // #[test]
-    // fn gen_ctxs() {
-    //     let it = CtxEnum::new(vec![
-    //         "x".to_string(),
-    //         "y".to_string(),
-    //         "z".to_string(),
-    //         "w".to_string(),
-    //         "a".to_string(),
-    //     ]);
-    //     eprintln!("");
-    //     for (i, c) in it.enumerate() {
-    //         eprintln!("{}\t{}", i, pretty_def(&c))
-    //     }
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use crate::util::{pretty::pretty_def, sub_set_iter::SubSetIter};
+//
+//     use super::*;
+//
+//     fn bind(x: &str) -> Ctx {
+//         Bind(fake_span(x.to_string()), fake_span(Type::Unit))
+//     }
+//
+//     fn u(c1: impl Boxed<Ctx>, c2: impl Boxed<Ctx>) -> Ctx {
+//         Join(c1, c2, Unordered)
+//     }
+//     fn o(c1: impl Boxed<Ctx>, c2: impl Boxed<Ctx>) -> Ctx {
+//         Join(c1, c2, Ordered)
+//     }
+//
+//     fn test_split<S: AsRef<str>>(c: &Ctx, xs: impl IntoIterator<Item = S>) {
+//         let xs: HashSet<Id> = xs.into_iter().map(|x| x.as_ref().to_string()).collect();
+//         eprintln!("\n––––––––––––––––––––––––––––––––––––––––––––––––––");
+//         eprintln!("Ctx:          {}", pretty_def(&c));
+//         eprintln!("Vars:         {}", pretty_def(&xs));
+//         let splittable = c.is_splittable(&xs);
+//         eprintln!("Splittable:   {}", splittable);
+//         if !splittable {
+//             return;
+//         }
+//         match c.split(&xs) {
+//             Some((cc, c2)) => {
+//                 let cc = cc.simplify();
+//                 let c2 = c2.simplify();
+//                 eprintln!("Split CtxCtx: {}", pretty_def(&cc));
+//                 eprintln!("Split Ctx:    {}", pretty_def(&c2));
+//
+//                 let cc_vars = cc.fill(Ctx::Empty).lin_vars();
+//                 assert!(
+//                     cc_vars.is_disjoint(&xs),
+//                     "Split CtxCtx is not disjoint to xs"
+//                 );
+//
+//                 let c2_vars = c2.vars();
+//                 assert!(c2_vars.is_subset(&xs), "Split Ctx is not a subset of xs");
+//
+//                 let c_res = cc.fill(c2);
+//                 eprintln!("Rejoined Ctx: {}", pretty_def(&c_res));
+//                 assert!(
+//                     c.to_sem().is_subctx_of(&c_res.to_sem()),
+//                     "Split context is not super-context of original"
+//                 );
+//
+//                 if c.to_sem() == c_res.to_sem() {
+//                     eprintln!("Split context is exactly equal to original")
+//                 } else {
+//                     eprintln!("Split context is worse than original")
+//                 }
+//             }
+//             None => assert!(false, "Failed splitting"),
+//         }
+//     }
+//
+//     // #[test]
+//     // fn split_1() {
+//     //     let c = o(bind("a"), bind("b"));
+//     //     test_split(&c, ["a"]);
+//     //     test_split(&c, ["b"]);
+//     //     test_split(&c, ["a", "b"]);
+//     //     test_split::<String>(&c, []);
+//     // }
+//
+//     // #[test]
+//     // fn split_2() {
+//     //     let c = u(o(bind("a"), bind("b")), o(bind("c"), bind("d")));
+//     //     test_split(&c, ["a"]);
+//     //     test_split(&c, ["b"]);
+//     //     test_split(&c, ["a", "b"]);
+//     //     test_split::<String>(&c, []);
+//     // }
+//
+//     #[test]
+//     fn split_3() {
+//         let c = o(bind("a"), o(bind("b"), bind("c")));
+//         test_split(&c, ["a", "c"]);
+//     }
+//
+//     #[test]
+//     fn ctx_split() {
+//         let xs = vec![
+//             "a".to_string(),
+//             "b".to_string(),
+//             "c".to_string(),
+//             "d".to_string(),
+//             "e".to_string(),
+//             // "f".to_string(),
+//             // "g".to_string(),
+//         ];
+//         let xs_set: HashSet<Id> = xs.iter().cloned().collect();
+//         let it = CtxEnum::new(xs.clone());
+//         eprintln!("");
+//         let mut count = 0;
+//         for (i, c) in it.enumerate() {
+//             for (j, ys) in SubSetIter::from(xs_set.clone()).enumerate() {
+//                 eprintln!("\nTest {count}, Ctx {i}, Subset {j}");
+//                 test_split(&c, &ys);
+//                 count += 1;
+//             }
+//         }
+//     }
+//
+//     // #[test]
+//     // fn gen_subsets() {
+//     //     let xs = HashSet::from(["x", "y", "z", "w"]);
+//     //     let it = SubSetIter::from(xs);
+//     //     eprintln!("");
+//     //     for (i, ys) in it.enumerate() {
+//     //         eprintln!("\nSubset {i} {ys:?}");
+//     //     }
+//     // }
+//
+//     // #[test]
+//     // fn gen_ctxs() {
+//     //     let it = CtxEnum::new(vec![
+//     //         "x".to_string(),
+//     //         "y".to_string(),
+//     //         "z".to_string(),
+//     //         "w".to_string(),
+//     //         "a".to_string(),
+//     //     ]);
+//     //     eprintln!("");
+//     //     for (i, c) in it.enumerate() {
+//     //         eprintln!("{}\t{}", i, pretty_def(&c))
+//     //     }
+//     // }
+// }

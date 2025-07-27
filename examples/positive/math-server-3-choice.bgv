@@ -1,0 +1,42 @@
+# This file illustrates internal & external choice by showing a simple
+# math server that offers the choice between addition and negation.
+
+# n-ary internal and external choice types are written as `+{ l: s, ... }` and
+# `&{ l: s, ... }`, respectively.
+
+# The `select l c` instruction sends the choice of label `l` on a channel end `c`.
+# The `offer c` instruction receives a choice of a label and returns a variant
+# type of continuations, which can be eliminated with a `case` expression.
+
+let
+  client : +{ neg: !Int.?Int.Close, add: !Int.!Int.?Int.Close } -[ u 1 ]→ Unit
+  client c =
+    select neg &c;
+    send 42 &c;
+    let y = recv &c in
+    print y;
+    close c
+in
+
+let
+  server : &{ neg: ?Int.!Int.Wait, add: ?Int.?Int.!Int.Wait } -[ u 1 ]→ Unit
+  server c =
+    case offer c {
+      add c1 -> {
+        let x = recv &c1 in
+        let y = recv &c1 in
+        send (x + y) &c1;
+        wait c1
+      }
+      neg c1 -> {
+        let x = recv &c1 in
+        send (0 - x) &c1;
+        wait c1
+      }
+    }
+in
+
+let c1, c2 = new +{ neg: !Int.?Int.Close, add: !Int.!Int.?Int.Close } in
+fork (server c2);
+client c1
+
