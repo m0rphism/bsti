@@ -58,6 +58,18 @@ pub enum TypeError {
 }
 
 pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
+    let res = if_chan_then_used_(e, t, u, x);
+    println!(
+        "Checking if param {} of type {} is used in usage map {:?}. Result: {}",
+        x.val,
+        pretty_def(t),
+        u,
+        res.is_ok()
+    );
+    res
+}
+
+pub fn if_chan_then_used_(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
     match &t.val {
         Type::Chan(s) => {
             if let Some(s2) = u.map.get(&x.val) {
@@ -1207,8 +1219,13 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                     Err(TypeError::RecursiveNonFunctionBinding(e.clone(), x.clone()))?
                 }
             }
-            for (pat, (arg_ty, m)) in c.pats.iter().zip(arg_tys) {
-                ctx_body = ext(m.val, ctx_body, check_pattern(pat, &arg_ty)?);
+            let mut pat_var_types = HashMap::new();
+            for (pat, (arg_ty, m)) in c.pats.iter().zip(&arg_tys) {
+                let ctx_new = check_pattern(pat, &arg_ty)?;
+                for (x, t) in ctx_new.binds() {
+                    pat_var_types.insert(x.clone(), t.clone());
+                }
+                ctx_body = ext(m.val, ctx_body, ctx_new);
             }
             let (mut u1, mut p1) = check(&ctx_body, &c.val.body, &ret_ty)?;
             if let Some(ret_eff) = ret_eff {
@@ -1219,6 +1236,14 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                         fake_span(p1),
                     ))?
                 }
+            }
+            for (x, t) in pat_var_types {
+                if_chan_then_used(
+                    &c.val.body,
+                    &fake_span(t.clone()),
+                    &u1,
+                    &fake_span(x.clone()),
+                )?;
             }
             for p in &c.pats {
                 for x in p.bound_vars() {
