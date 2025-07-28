@@ -26,7 +26,7 @@ in let
    add c = binf (\x. \y. x + y) c
 in let
    bin_client : Int -[ u 0 ]-> Int -[ u 0 ]->
-  	        (mu x . +{BIN: !Int. !Int. ?Int. Return, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]-> Int
+  	        +{BIN: !Int. !Int. ?Int. Return} -[ u 1 ]-> Int
    bin_client x y c =
      select BIN &c ;
      send x &c ;
@@ -35,14 +35,35 @@ in let
      r
 in let
    many_bin_clients : Int -[ u 0 ]->
-                      (mu list . &{CONS: ?Int. list, NIL: Wait}) -[ u 0 ]->
+                      (mu list . &{CONS: ?Int. list, NIL: Wait}) *[ p ]
                       (mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]->
 		      Int
-   many_bin_clients n cl c =
+   many_bin_clients n (cl,  c) =
      case offer cl  {
        CONS cl1 -> { let r = bin_client n (recv &cl1) &c in
-                     many_bin_clients r cl1 c }
+                     many_bin_clients r (cl1, c) }
        NIL cl1 -> { wait cl1 ; select QUIT &c ; wait c ; n }
      }
+in let
+   cons : Int -[ u 0 ]-> +{CONS: !Int. Return} -[ u 1 ]-> Unit
+   cons i b =
+     select CONS &b; send i b
+in let
+   nil : (mu list . +{CONS: !Int. list, NIL: Close}) -[ u 1 ]-> Unit
+   nil c = select NIL &c; close c
+in let
+   provider : (mu list . +{CONS: !Int. list, NIL: Close}) -[ u 1 ]-> Unit
+   provider c =
+     cons 17 &c;
+     cons 4 &c;
+     cons 1 &c;
+     nil c
+in let
+   list1, list2 = new (mu list . &{CONS: ?Int. list, NIL: Wait})
+in let
+   ga1, ga2 = new (mu x . &{BIN: ?Int. ?Int. !Int. x, UN: ?Int. !Int. x, QUIT: Close})
 in
-unit
+fork (provider list2);
+fork (general neg add ga1);
+many_bin_clients 100 (list1, ga2)
+
