@@ -259,13 +259,23 @@ impl Session {
     pub fn sem_eq(&self, other: &Self) -> bool {
         self.sem_eq_(other, &HashSet::new())
     }
-    fn split_(&self, p: &Session, seen: &HashSet<(Session, Session)>) -> Result<Option<Self>, ()> {
+    pub fn split_(
+        &self,
+        p: &Session,
+        seen: &HashSet<(Session, Session)>,
+    ) -> Result<Option<Self>, ()> {
         let mut seen = seen.clone();
         if !seen.insert((self.clone(), p.clone())) {
             Ok(None)
         } else {
             match (self, p) {
-                (_, Session::End(_op2)) => Err(()),
+                (Session::End(op1), Session::End(op2)) => {
+                    if op1 == op2 {
+                        Ok(None)
+                    } else {
+                        Err(())
+                    }
+                }
                 (_, Session::Return) => Ok(Some(self.clone())),
                 (Session::Op(op1, t1, s1), Session::Op(op2, t2, s2))
                     if op1 == op2 && t1.sem_eq(t2) =>

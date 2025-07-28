@@ -57,23 +57,34 @@ pub enum TypeError {
     IfDifferentBranchUsageMaps(SExpr, Rep, Rep),
 }
 
-pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
-    let res = if_chan_then_used_(e, t, u, x);
-    println!(
-        "Checking if param {} of type {} is used in usage map {:?}. Result: {}",
-        x.val,
-        pretty_def(t),
-        u,
-        res.is_ok()
-    );
-    res
-}
+// pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
+//     let res = if_chan_then_used_(e, t, u, x);
+//     println!(
+//         "Checking if param {} of type {} is used in usage map {:?}. Result: {}",
+//         x.val,
+//         pretty_def(t),
+//         u,
+//         res.is_ok()
+//     );
+//     res
+// }
 
-pub fn if_chan_then_used_(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
+pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
     match &t.val {
         Type::Chan(s) => {
             if let Some(s2) = u.map.get(&x.val) {
-                if !s.sem_eq(s2) {
+                let is_subtype = s
+                    .split_(s2, &HashSet::new())
+                    .ok()
+                    .and_then(|r| match r {
+                        None => Some(()),
+                        Some(r) if r.sem_eq(&Session::Return) => Some(()),
+                        Some(_) => None,
+                    })
+                    .is_some();
+                // println!("sem_eq:  {}", s.sem_eq(s2));
+                // println!("subtype: {}", is_subtype);
+                if !(s.sem_eq(s2) || is_subtype) {
                     Err(TypeError::LeftOverVar(
                         e.clone(),
                         x.clone(),
@@ -740,14 +751,14 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
 
-            println!(
-                "compute_ctx_ctx(\n  e=\n{}\n  u1=\n{}\n  fvs1=\n{}\n  fvs2=\n{}\n  ctx=\n{}\n)",
-                indented(4, pretty_def(e)),
-                indented(4, format!("{u1:?}")),
-                indented(4, format!("{fvs1:?}")),
-                indented(4, format!("{fvs2:?}")),
-                indented(4, pretty_def(ctx)),
-            );
+            // println!(
+            //     "compute_ctx_ctx(\n  e=\n{}\n  u1=\n{}\n  fvs1=\n{}\n  fvs2=\n{}\n  ctx=\n{}\n)",
+            //     indented(4, pretty_def(e)),
+            //     indented(4, format!("{u1:?}")),
+            //     indented(4, format!("{fvs1:?}")),
+            //     indented(4, format!("{fvs2:?}")),
+            //     indented(4, pretty_def(ctx)),
+            // );
             let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
 
             if cc.vars().contains(&x.val) {
