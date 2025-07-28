@@ -124,8 +124,9 @@ pub fn rename_vars(r: &Ren, xs: &HashSet<Id>) -> HashSet<Id> {
     for x in xs {
         if let Some(y) = r.map.get(x) {
             out.insert(y.clone());
+        } else {
+            out.insert(x.clone());
         }
-        out.insert(x.clone());
     }
     out
 }
@@ -1238,6 +1239,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 }
                 ctx_body = ext(m.val, ctx_body, ctx_new);
             }
+            // println!("ContextBody: {}", pretty_def(&ctx_body));
             let (mut u1, mut p1) = check(&ctx_body, &c.val.body, &ret_ty)?;
             if let Some(ret_eff) = ret_eff {
                 if !Eff::leq(p1, ret_eff.val) {

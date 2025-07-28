@@ -226,7 +226,7 @@ impl Ctx {
                 let (cc1, c1) = c1.split(xs)?;
                 let (cc2, c2) = c2.split(xs)?;
                 match o {
-                    Ordered => {
+                    Ordered if !c1.is_unr() && !c2.is_unr() => {
                         if let (Some(c1x), Some(c2x)) = (cc1.pull_right(), cc2.pull_left()) {
                             Some((
                                 JoinR(c1x, JoinL(Hole, c2x, Ordered), Ordered),
@@ -236,7 +236,7 @@ impl Ctx {
                             None
                         }
                     }
-                    Unordered => {
+                    _ => {
                         if let (Some(c1x), Some(c2x)) = (cc1.pull_par(), cc2.pull_par()) {
                             Some((
                                 JoinR(c1x, JoinL(CtxCtxS::Hole, c2x, Unordered), Unordered),
