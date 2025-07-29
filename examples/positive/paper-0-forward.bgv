@@ -1,0 +1,32 @@
+## previous example
+
+let
+  fwd0 : !String. !Int. Return -[ u 0 ]->
+        ?String. ?Int. Return -[ p 1 ]->
+	Unit
+  fwd0 cout cin = send (recv &cin) &cout; send (recv cin) cout
+in let
+  client0 : !String. !Int. ?Bool. Close -[ u 0 ]->
+           ?String. ?Int. !Bool. Wait  -[ p 1 ]->
+	   Unit
+  client0 cout cin =
+    fwd0 &cout &cin;
+    send (recv &cout) &cin;
+    close cout; wait cin
+
+## example from introduction
+
+in let
+   fwd1 : ?Int. ?Bool. Return -[ u 0 ]->
+          !Int. !Bool. Return -[ p 1 ]->
+	  Unit
+   fwd1 cin cout = send (recv &cin) &cout; send (recv &cin) &cout
+in let
+   client1 : ?Int. ?Bool. !Int. !Bool. Wait -[ u 0 ]->
+             !Int. !Bool. ?Int. ?Bool. Close -[ p 1 ]->
+	     Unit
+   client1 cin cout = fwd1 &cin &cout
+   ; fwd1 &cout &cin
+   ; wait cin; close cout
+in
+unit
