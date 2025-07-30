@@ -2,13 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ren::Ren,
-    rep::Rep,
     syntax::{
         Eff, Expr, Id, Label, Mult, Op1, Op2, Pattern, SClause, SEff, SExpr, SId, SLabel, SMult,
         SPattern, SSession, SType, Session, SessionOp, Type,
     },
     type_context::{ext, Ctx, CtxCtx, CtxS, JoinOrd},
-    util::{pretty::pretty_def, span::fake_span},
+    usage_map::UsageMap,
+    util::span::fake_span,
 };
 
 #[derive(Debug, Clone)]
@@ -53,8 +53,8 @@ pub enum TypeError {
     WfSessionNotClosed(SSession, SId),
     WfSessionShadowing(SSession, SId),
     NewWithBorrowedType(SExpr, SSession),
-    CaseDifferentBranchUsageMaps(SExpr, String, Rep, String, Rep),
-    IfDifferentBranchUsageMaps(SExpr, Rep, Rep),
+    CaseDifferentBranchUsageMaps(SExpr, String, UsageMap, String, UsageMap),
+    IfDifferentBranchUsageMaps(SExpr, UsageMap, UsageMap),
 }
 
 // pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
@@ -69,7 +69,7 @@ pub enum TypeError {
 //     res
 // }
 
-pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), TypeError> {
+pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &UsageMap, x: &SId) -> Result<(), TypeError> {
     match &t.val {
         Type::Chan(s) => {
             if let Some(s2) = u.map.get(&x.val) {
@@ -107,7 +107,7 @@ pub fn if_chan_then_used(e: &SExpr, t: &SType, u: &Rep, x: &SId) -> Result<(), T
     }
 }
 
-pub fn split_infos(fvs: &HashSet<Id>, u: &Rep) -> HashMap<Id, Session> {
+pub fn split_infos(fvs: &HashSet<Id>, u: &UsageMap) -> HashMap<Id, Session> {
     let mut sis = HashMap::new();
     for x in fvs {
         if let Some(s) = u.map.get(x) {
@@ -158,8 +158,8 @@ pub fn union<T: std::hash::Hash + Eq + Clone>(
 
 pub fn check_split_alg_gen(
     e: &SExpr,
-    u1: &Rep,
-    u2: &Rep,
+    u1: &UsageMap,
+    u2: &UsageMap,
     fvs1: &HashSet<Id>,
     fvs2: &HashSet<Id>,
     ctx: &Ctx,
@@ -189,8 +189,8 @@ pub fn check_split_alg_gen(
 
 pub fn check_split_alg(
     e: &SExpr,
-    u1: &Rep,
-    u2: &Rep,
+    u1: &UsageMap,
+    u2: &UsageMap,
     fvs1: &HashSet<Id>,
     fvs2: &HashSet<Id>,
     ctx: &Ctx,
@@ -204,7 +204,7 @@ pub fn check_split_alg(
 
 pub fn compute_ctx_ctx(
     e: &SExpr,
-    u1: &Rep,
+    u1: &UsageMap,
     fvs1: &HashSet<Id>,
     fvs2: &HashSet<Id>,
     ctx: &Ctx,
@@ -279,7 +279,7 @@ pub fn check_variant_label_eq(
     Ok(())
 }
 
-pub fn check_rep_eq(e: &SExpr, u1: &Rep, u2: &Rep) -> Result<(), TypeError> {
+pub fn check_rep_eq(e: &SExpr, u1: &UsageMap, u2: &UsageMap) -> Result<(), TypeError> {
     for (x, s1) in &u1.map {
         if let Some(s2) = u2.map.get(x) {
             if !s1.sem_eq(s2) {
@@ -384,7 +384,7 @@ pub fn check_wf_type(t: &SType) -> Result<(), TypeError> {
     }
 }
 
-pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
+pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(UsageMap, Eff), TypeError> {
     match &e.val {
         Expr::Abs(x, e_body) => match &t.val {
             Type::Arr(m, p, t1, t2) => {
@@ -455,7 +455,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
             };
             // Assert that the `s % s1` is defined
             if let Some(_s2) = s.split(s1) {
-                let u = Rep::single(x.val.clone(), s1.val.clone());
+                let u = UsageMap::single(x.val.clone(), s1.val.clone());
                 Ok((u, Eff::No))
             } else {
                 Err(TypeError::InvalidSplit(e.clone(), s.clone(), s1.clone()))
@@ -495,7 +495,7 @@ pub fn check(ctx: &Ctx, e: &SExpr, t: &SType) -> Result<(Rep, Eff), TypeError> {
     }
 }
 
-pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
+pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> {
     match &e.val {
         Expr::Borrow(x) => {
             // Lookup type of `x`
@@ -521,14 +521,18 @@ pub fn infer_recv_arg(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeErr
                 _ => return err,
             };
             let s1 = Session::Op(SessionOp::Recv, t, Box::new(fake_span(Session::Return)));
-            let u = Rep::single(x.val.clone(), s1.clone());
+            let u = UsageMap::single(x.val.clone(), s1.clone());
             Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
         }
         _ => infer(ctx, e),
     }
 }
 
-pub fn infer_select_arg(ctx: &Ctx, e: &SExpr, l: &SLabel) -> Result<(SType, Rep, Eff), TypeError> {
+pub fn infer_select_arg(
+    ctx: &Ctx,
+    e: &SExpr,
+    l: &SLabel,
+) -> Result<(SType, UsageMap, Eff), TypeError> {
     match &e.val {
         Expr::Borrow(x) => {
             // Lookup type of `x`
@@ -559,7 +563,7 @@ pub fn infer_select_arg(ctx: &Ctx, e: &SExpr, l: &SLabel) -> Result<(SType, Rep,
                 SessionOp::Send,
                 vec![(l.clone(), fake_span(Session::Return))],
             );
-            let u = Rep::single(x.val.clone(), s1.clone());
+            let u = UsageMap::single(x.val.clone(), s1.clone());
             Ok((fake_span(Type::Chan(fake_span(s1))), u, Eff::No))
         }
         _ => infer(ctx, e),
@@ -589,14 +593,14 @@ pub fn indented(n: usize, s: impl AsRef<str>) -> String {
 //     res
 // }
 
-pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
+pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> {
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
             Some((ctx, t)) => {
                 assert_unr_ctx(e, &ctx)?;
                 let u = match &t.val {
-                    Type::Chan(s) => Rep::single(x.val.clone(), s.val.clone()),
-                    _ => Rep::empty(),
+                    Type::Chan(s) => UsageMap::single(x.val.clone(), s.val.clone()),
+                    _ => UsageMap::empty(),
                 };
                 Ok((t.clone(), u, Eff::No))
             }
@@ -905,7 +909,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 cs_zip.push((l, x, e, t));
             }
 
-            let mut out: Option<(String, SType, Rep, Eff)> = None;
+            let mut out: Option<(String, SType, UsageMap, Eff)> = None;
             for (l, x_, e_, t_) in &cs_zip {
                 let c_ = cc.fill(Ctx::Bind((*x_).clone(), (*t_).clone()));
                 let (t2_, u2_, p2_) = infer(&c_, e_)?;
@@ -1013,7 +1017,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
                 Box::new(fake_span(Type::Chan(s.clone()))),
                 Box::new(fake_span(Type::Chan(fake_span(s.dual())))),
             ));
-            Ok((t, Rep::empty(), Eff::No))
+            Ok((t, UsageMap::empty(), Eff::No))
         }
         Expr::Send(e1, e2) => {
             let fvs1 = e1.free_vars();
@@ -1103,7 +1107,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
         }
         Expr::Const(c) => {
             assert_unr_ctx(&e, &ctx)?;
-            Ok((fake_span(c.type_()), Rep::empty(), Eff::No))
+            Ok((fake_span(c.type_()), UsageMap::empty(), Eff::No))
         }
         Expr::Ann(e, t) => {
             check_wf_type(t)?;
@@ -1319,7 +1323,7 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, Rep, Eff), TypeError> {
             if cs.len() != 1 {
                 return err;
             }
-            let Some((_, s)) = cs.iter().find(|(l2, _)| *l == *l2) else {
+            let Some((_, _)) = cs.iter().find(|(l2, _)| *l == *l2) else {
                 return err;
             };
             Ok((fake_span(Type::Unit), u1, Eff::Yes))

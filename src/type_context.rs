@@ -2,12 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use crate::ren::Ren;
-use crate::rep::Rep;
 use crate::syntax::{Id, Mult, SId, SType, Session, SessionOp, Type, TypeSemEq};
-use crate::type_checker::TypeError;
+use crate::usage_map::UsageMap;
 use crate::util::boxed::Boxed;
 use crate::util::graph::Graph;
-use crate::util::pretty::{pretty_def, Pretty, PrettyEnv};
+use crate::util::pretty::{Pretty, PrettyEnv};
 use crate::util::span::fake_span;
 
 use CtxCtxS::*;
@@ -295,7 +294,7 @@ impl Ctx {
     }
 
     // ⋯ʳ operator from Agda
-    pub fn replace(&self, u: &Rep) -> Ctx {
+    pub fn replace(&self, u: &UsageMap) -> Ctx {
         let mut ctx = self.clone();
         ctx.map_binds_mut(&mut |x: &mut Id, t: &mut Type| {
             if let Type::Chan(_) = &t {
@@ -308,7 +307,7 @@ impl Ctx {
     }
 
     // %ᶜ operator from Agda
-    pub fn split_off(&self, u: &Rep) -> Ctx {
+    pub fn split_off(&self, u: &UsageMap) -> Ctx {
         let mut ctx = self.clone();
         ctx.map_binds_mut(&mut |x: &mut Id, t: &mut Type| {
             if let Type::Chan(s) = &t {
@@ -522,7 +521,7 @@ impl CtxCtx {
     }
 
     // ⋯ʳᶜ operator from Agda
-    pub fn replace(&self, u: &Rep) -> Self {
+    pub fn replace(&self, u: &UsageMap) -> Self {
         self.flatmap_binds(&mut |x: Id, mut t: Type| {
             if let Type::Chan(_) = &t {
                 if let Some(s) = u.map.get(&x) {
