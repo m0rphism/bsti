@@ -594,6 +594,8 @@ pub fn indented(n: usize, s: impl AsRef<str>) -> String {
 // }
 
 pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> {
+    // println!("\nExpression: {}", pretty_def(&e));
+    // println!("Ctx: {}", pretty_context_notype(&ctx.simplify()));
     match &e.val {
         Expr::Var(x) => match ctx.lookup_ord_pure(x) {
             Some((ctx, t)) => {
@@ -714,6 +716,19 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> 
                 if ctx_split.is_subctx_of(&c12_lin) {
                     Mult::Lin
                 } else {
+                    // println!("\nExpression: {}", pretty_def(&e));
+                    // println!(
+                    //     "contexts are not subcontexts:\nContext1: {}\nContext2: {}",
+                    //     pretty_def(&ctx_split),
+                    //     pretty_def(&c12_lin),
+                    // );
+                    // println!(
+                    //     "contexts are not subcontexts:\nContext1Simple: {}\nContext2Simple: {}",
+                    //     pretty_def(&ctx_split.simplify()),
+                    //     pretty_def(&c12_lin.simplify()),
+                    // );
+                    // println!("Ctx: {}", pretty_def(ctx));
+                    // println!("CtxSimple: {}", pretty_def(&ctx.simplify()));
                     let c12_ordl = CtxS::Join(
                         c1.replace(&u1).rename(&r1),
                         c2.replace(&u2).rename(&r2),
@@ -824,6 +839,8 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> 
             let c1 = ctx.restrict(&fvs1);
             let (t1, u1, p1) = infer(&c1, e1)?;
 
+            // println!("Ctx1: {}", pretty_context_notype(&c1.simplify()));
+
             let Type::Prod(m, t11, t12) = &t1.val else {
                 return Err(TypeError::Mismatch(
                     *e1.clone(),
@@ -833,6 +850,10 @@ pub fn infer(ctx: &Ctx, e: &SExpr) -> Result<(SType, UsageMap, Eff), TypeError> 
             };
 
             let cc = compute_ctx_ctx(e, &u1, &fvs1, &fvs2, ctx)?;
+            // println!(
+            //     "CtxC: {}",
+            //     pretty_context_notype(&cc.simplify().fill(Ctx::Empty))
+            // );
 
             if cc.vars().contains(&x.val) {
                 Err(TypeError::Shadowing(e.clone(), x.clone()))?

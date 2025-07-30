@@ -197,6 +197,16 @@ impl Ctx {
         true
     }
     pub fn split(&self, xs: &HashSet<Id>) -> Option<(CtxCtx, Ctx)> {
+        if xs.len() == 0 {
+            return Some((
+                CtxCtx::JoinR(
+                    Box::new(self.clone()),
+                    Box::new(CtxCtx::Hole),
+                    JoinOrd::Unordered,
+                ),
+                Ctx::Empty,
+            ));
+        }
         match self {
             Ctx::Empty => Some((CtxCtxS::Hole, Ctx::Empty)),
             Ctx::Bind(x, t) => {
@@ -611,6 +621,24 @@ impl Pretty<()> for Ctx {
                 p.pp(c2);
                 p.pp(")")
             }
+        }
+    }
+}
+
+pub fn pretty_context_notype(c: &Ctx) -> String {
+    match c {
+        Ctx::Empty => format!("·"),
+        Ctx::Bind(x, _) => format!("{}", x.val),
+        Ctx::Join(c1, c2, o) => {
+            format!(
+                "({} {} {})",
+                pretty_context_notype(c1),
+                match o {
+                    Ordered => ",",
+                    Unordered => "∥",
+                },
+                pretty_context_notype(c2),
+            )
         }
     }
 }
