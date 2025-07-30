@@ -2,9 +2,9 @@ use std::{collections::HashSet, ops::Range};
 
 use crate::{
     lexer::LexerError,
-    rep::Rep,
     semantics::EvalError,
     type_checker::TypeError,
+    usage_map::UsageMap,
     util::{pretty::pretty_def, span::Span},
 };
 use ariadne::{ColorGenerator, IndexType, Label, Report, ReportKind, Source};
@@ -444,7 +444,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 );
             }
             TypeError::CaseDifferentBranchUsageMaps(e, l1, r1, l2, r2) => {
-                let pretty_rep = |r: &Rep| {
+                let pretty_rep = |r: &UsageMap| {
                     let mut s = String::new();
                     for (x, t) in &r.map {
                         s += &format!("  {} : {}\n", x, pretty_def(t));
@@ -470,7 +470,7 @@ pub fn report_error(src_path: &str, src: &str, e: IErr) {
                 );
             }
             TypeError::IfDifferentBranchUsageMaps(e, r1, r2) => {
-                let pretty_rep = |r: &Rep| {
+                let pretty_rep = |r: &UsageMap| {
                     let mut s = String::new();
                     for (x, t) in &r.map {
                         s += &format!("  {} : {}\n", x, pretty_def(t));

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{fresh_var::fresh_var, syntax::Id};
+use crate::syntax::Id;
 
 #[derive(Debug, Clone)]
 pub struct Ren {

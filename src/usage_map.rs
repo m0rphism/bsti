@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 
-use crate::{
-    syntax::{Id, Session},
-    util::pretty::pretty_def,
-};
+use crate::syntax::{Id, Session};
 
 #[derive(Debug, Clone)]
-pub struct Rep {
+pub struct UsageMap {
     pub map: HashMap<Id, Session>,
 }
 
-impl Rep {
+impl UsageMap {
     pub fn empty() -> Self {
         Self {
             map: HashMap::new(),
@@ -35,7 +32,7 @@ impl Rep {
     pub fn remove_mut(&mut self, x: &Id) {
         let _ = self.map.remove(x);
     }
-    pub fn remove(&self, x: &Id) -> Rep {
+    pub fn remove(&self, x: &Id) -> UsageMap {
         let mut u = self.clone();
         u.remove_mut(x);
         u

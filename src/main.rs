@@ -5,11 +5,11 @@ pub mod lexer;
 pub mod parser;
 pub mod pretty;
 pub mod ren;
-pub mod rep;
 pub mod semantics;
 pub mod syntax;
 pub mod type_checker;
 pub mod type_context;
+pub mod usage_map;
 pub mod util;
 
 #[cfg(test)]
