@@ -1,4 +1,4 @@
-# Example from our paper
+# Example from our paper, section 2.5
 
 let
   higher_order : !(Chan (?Int. return)). Close -[ u 0 ]->

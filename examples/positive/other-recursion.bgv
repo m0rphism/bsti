@@ -1,4 +1,4 @@
-# Example from our paper
+# Old recursion example from a previous version of our paper
 
 let
   sum_avr : Int -[u 0]->

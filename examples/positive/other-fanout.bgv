@@ -1,0 +1,33 @@
+let
+  forward : ?Int.Return -[ u 0 ]→ !Int.Return -[ p 1 ]→ Unit
+  forward cout cin = send (recv cout) cin
+in
+
+let
+  fanout : Bool -[ u 0 ]→
+           (mu X . &{ NIL: wait, CONS: !Int.X }) *[p]
+           (mu X . +{ NIL: close, CONS: ?Int.X }) *[p]
+           (mu X . +{ NIL: close, CONS: ?Int.X }) -[ u 1 ]→
+           Unit
+  fanout b (cout, (cin1, cin2)) = case branch cout {
+    NIL cout1 → {
+      wait cout1;
+      select NIL &cin1;
+      close cin1;
+      select NIL &cin2;
+      close cin2
+    }
+    CONS cout1 → {
+      if b then
+        select CONS &cin1;
+        forward &cin1 &cout1;
+        fanout (!b) (cout1, (cin1, cin2))
+      else
+        select CONS &cin2;
+        forward &cin2 &cout1;
+        fanout (!b) (cout1, (cin1, cin2))
+    }
+  }
+in
+
+unit

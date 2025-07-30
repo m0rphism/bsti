@@ -1,4 +1,4 @@
-# Example from our paper
+# Example from our paper, section 2.2
 
 let
   calculate : &{Add: ?Int. ?Int. Return, Neg: ?Int. Return} -[ u 1 ]-> Int

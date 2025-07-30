@@ -1,3 +1,5 @@
+# Example from our paper, Section 2.4
+
 let
   problem1 : ?Int. ?String. Close -[ u 1 ]-> Unit
   problem1 c =
