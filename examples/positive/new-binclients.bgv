@@ -19,7 +19,7 @@ let
     (mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait}) -[ u 1 ]->
     Int
   many_bin_clients n (cl, c) =
-    case offer cl  {
+    case branch cl  {
       CONS cl1 -> {
         let r = bin_client n (recv &cl1) &c in
         many_bin_clients r (cl1, c)
@@ -54,7 +54,7 @@ unit
 #    mu x . +{BIN: !Int. !Int. ?Int. x, UN: !Int. ?Int. x, QUIT: Wait} -[ u 1 ]->
 #    Int
 #  many_bin_clients n cl c =
-#    case offer cl  {
+#    case branch cl  {
 #      CONS cl1 -> {
 #        let r = bin_client n (recv &cl1) &c in
 #        many_bin_clients r cl1 c

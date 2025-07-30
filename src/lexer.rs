@@ -105,8 +105,8 @@ pub enum Token<'a> {
     Mu,
     #[token("select")]
     Select,
-    #[token("offer")]
-    Offer,
+    #[token("branch")]
+    Branch,
 
     // Operators
     #[token(";")]
@@ -306,7 +306,7 @@ impl<'a> Token<'a> {
             Token::StringT => "String",
             Token::Mu => "µ",
             Token::Select => "select",
-            Token::Offer => "offer",
+            Token::Branch => "branch",
         }
     }
 }

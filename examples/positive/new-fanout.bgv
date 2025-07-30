@@ -33,7 +33,7 @@ let
            (mu X . +{ NIL: close, CONS: ?Int.X }) *[p]
            (mu X . +{ NIL: close, CONS: ?Int.X }) -[ u 1 ]→
            Unit
-  fanout b (cout, (cin1, cin2)) = case offer cout {
+  fanout b (cout, (cin1, cin2)) = case branch cout {
     NIL cout1 → {
       wait cout1;
       select NIL &cin1;

@@ -14,7 +14,7 @@ let
            µ x. &{next: ?Int.x, done: !Int.Wait} -[ u 1 ]→
            Unit
   server acc c =
-    case (offer c) {
+    case (branch c) {
       next c1 → {
         server (acc + recv &c1) c1
       }

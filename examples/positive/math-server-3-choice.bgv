@@ -5,7 +5,7 @@
 # `&{ l: s, ... }`, respectively.
 
 # The `select l c` instruction sends the choice of label `l` on a channel end `c`.
-# The `offer c` instruction receives a choice of a label and returns a variant
+# The `branch c` instruction receives a choice of a label and returns a variant
 # type of continuations, which can be eliminated with a `case` expression.
 
 let
@@ -21,7 +21,7 @@ in
 let
   server : &{ neg: ?Int.!Int.Wait, add: ?Int.?Int.!Int.Wait } -[ u 1 ]→ Unit
   server c =
-    case offer c {
+    case branch c {
       add c1 -> {
         let x = recv &c1 in
         let y = recv &c1 in

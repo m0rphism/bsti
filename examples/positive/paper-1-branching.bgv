@@ -3,7 +3,7 @@
 let
   calculate : &{Add: ?Int. ?Int. Return, Neg: ?Int. Return} -[ u 1 ]-> Int
   calculate c0 =
-    case offer c0 {
+    case branch c0 {
       Add c -> { recv &c + recv c }
       Neg c -> { 0 - recv c }
     }

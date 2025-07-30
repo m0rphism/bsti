@@ -1,8 +1,4 @@
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{io::Write, path::PathBuf, str::FromStr};
 
 use crate::{
     error_reporting::{report_error, IErr},

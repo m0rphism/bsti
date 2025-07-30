@@ -216,7 +216,7 @@ peg::parser! {
             / tok(Close) e:sexpr_atom() { Expr::End(SessionOp::Send, Box::new(e)) }
             / tok(Wait) e:sexpr_atom() { Expr::End(SessionOp::Recv, Box::new(e)) }
             / tok(Select) l:sid() e:sexpr_atom() { Expr::Select(l, Box::new(e)) }
-            / tok(Offer) e:sexpr_atom() { Expr::Offer(Box::new(e)) }
+            / tok(Branch) e:sexpr_atom() { Expr::Offer(Box::new(e)) }
             / tok(Inj) l:sid() e:sexpr_atom() { Expr::Inj(l, Box::new(e)) }
             / tok(Fork) e:sexpr_atom() { Expr::Fork(Box::new(e)) }
             / tok(ToStr) e:sexpr_atom() { Expr::Op1(Op1::ToStr, Box::new(e)) }

@@ -17,7 +17,7 @@ let
       (?Int.?Int.!Int.Return -[ u 0 ]→ Unit) -[ u 0 ]→
       (mu X. &{ UN: ?Int.!Int.X, BIN: ?Int.?Int.!Int.X, QUIT: Wait }) -[ u 1 ]→
       Unit
-  F un bin c = case offer c {
+  F un bin c = case branch c {
     UN   c1 → { un &c1;  F un bin c1 }
     BIN  c1 → { bin &c1; F un bin c1 }
     QUIT c1 → { wait c1 }

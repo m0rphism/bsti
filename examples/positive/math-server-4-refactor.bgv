@@ -17,7 +17,7 @@ in
 let
   server : &{ neg: ?Int.!Int.Wait, add: ?Int.?Int.!Int.Wait } -[ u 1 ]→ Unit
   server c =
-    let c2, z = case offer c {
+    let c2, z = case branch c {
       add c1 -> {
         let x = recv &c1 in
         let y = recv &c1 in

@@ -4,7 +4,7 @@ let
   -[ u 0]-> &{BIN: ?Int. ?Int. !Int. Close, UN: ?Int. !Int. Close}
   -[ p 1 ]-> Unit
   general un bin c0 =
-    case offer c0 {
+    case branch c0 {
       UN  c -> { un &c ; close c }
       BIN c -> { bin &c ; close c }
     }

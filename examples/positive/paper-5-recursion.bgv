@@ -6,7 +6,7 @@ let
             mu X. &{Next: ?Int. X, Sum: Return, Avr: Return} -[u 1]->
             Int
   sum_avr s n c0 =
-    case offer c0 {
+    case branch c0 {
       Next c -> { sum_avr (recv &c + s) (n + 1) c }
       Sum c  -> { drop c; s }
       Avr c  -> { drop c; s / n }
